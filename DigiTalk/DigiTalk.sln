@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.6.33723.286
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DigiTalk", "DigiTalk\DigiTalk.csproj", "{2CDA9F34-A4C1-4805-877D-E7E728DFE20E}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DigiTalk.Desktop", "DigiTalk.Desktop\DigiTalk.Desktop.csproj", "{B32184AA-30E3-4317-85C2-483DFE5AE5D7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2CDA9F34-A4C1-4805-877D-E7E728DFE20E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2CDA9F34-A4C1-4805-877D-E7E728DFE20E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2CDA9F34-A4C1-4805-877D-E7E728DFE20E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2CDA9F34-A4C1-4805-877D-E7E728DFE20E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B32184AA-30E3-4317-85C2-483DFE5AE5D7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B32184AA-30E3-4317-85C2-483DFE5AE5D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B32184AA-30E3-4317-85C2-483DFE5AE5D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B32184AA-30E3-4317-85C2-483DFE5AE5D7}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6E1B8CBB-CA80-4AD5-8F92-5005158E7191}
+	EndGlobalSection
+EndGlobal
