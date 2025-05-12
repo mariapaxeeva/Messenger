@@ -42,8 +42,114 @@ std::string hash_password(const std::string& password) {
 
 // Функция обработки клиентского подключения
 void handle_client(SOCKET client_socket) {
+    char buffer[BUFFER_SIZE];
+    std::string username;
 
+    // Аутентификация клиента
+    int len = recv(client_socket, buffer, BUFFER_SIZE, 0);
+    if (len <= 0) {
+        closesocket(client_socket);
+        return;
+    }
+
+    std::string auth(buffer, len);
+    size_t sep = auth.find(':');
+    if (sep == std::string::npos) {
+        send(client_socket, "FAIL:Invalid format", 18, 0);
+        closesocket(client_socket);
+        return;
+    }
+
+    // Проверка, является ли запрос регистрацией
+    bool is_register = false;
+    if (auth.starts_with("REGISTER:")) {
+        is_register = true;
+        auth = auth.substr(9); // Удаление префикс REGISTER:
+    }
+
+    sep = auth.find(':');
+    std::string user = auth.substr(0, sep);
+    std::string pass = auth.substr(sep + 1);
+
+    if (is_register) {
+        // Проверка существования пользователя
+        for (const auto& client : clients) {
+            if (client.username == user) {
+                send(client_socket, "FAIL:User already exists", 23, 0);
+                closesocket(client_socket);
+                return;
+            }
+        }
+
+        // Регистрация нового пользователя
+        send(client_socket, "OK:Registered successfully", 25, 0);
+        closesocket(client_socket);
+        return;
+    }
+    else {
+        // Аутентификация
+        username = user;
+        send(client_socket, "OK", 2, 0);
+    }
+
+    // Добавление клиента в список подключенных
+    {
+        std::lock_guard<std::mutex> lock(clients_mutex);
+        clients.push_back({ client_socket, username});
+    }
+
+    // Основной цикл обработки команд от клиента
+    while (true) {
+        len = recv(client_socket, buffer, BUFFER_SIZE, 0);
+        if (len <= 0) break;
+
+        std::string command(buffer, len);
+        if (command.starts_with("MSG:")) {
+            // Обработка сообщения
+            std::string msg = command.substr(4);
+            size_t sep = msg.find(':');
+            std::string recipient = msg.substr(0, sep);
+            std::string content = msg.substr(sep + 1);
+
+            // Пересылка сообщения получателю(ям)
+            std::lock_guard<std::mutex> lock(clients_mutex);
+            if (recipient[0] == '#') {
+                // Групповое сообщение
+                for (const auto& client : clients) {
+                    if (client.username != username) { // Не отправляем себе
+                        send(client.socket, command.c_str(), command.size(), 0);
+                    }
+                }
+            }
+            else {
+                // Личное сообщение
+                for (const auto& client : clients) {
+                    if (client.username == recipient) {
+                        send(client.socket, command.c_str(), command.size(), 0);
+                        break;
+                    }
+                }
+            }
+        }
+        else if (command.starts_with("DEL:")) {
+            // Уведомление всех клиентов об удалении
+            std::lock_guard<std::mutex> lock(clients_mutex);
+            for (auto& client : clients) {
+                send(client.socket, command.c_str(), command.size(), 0);
+            }
+        }
+    }
+
+    // Удаление клиента из списка при отключении
+    {
+        std::lock_guard<std::mutex> lock(clients_mutex);
+        clients.erase(std::remove_if(clients.begin(), clients.end(),
+            [&](const Client& c) { return c.socket == client_socket; }), clients.end());
+    }
+
+    closesocket(client_socket);
 }
+
 
 int main() {
     // Инициализация Winsock
