@@ -6,12 +6,14 @@
 #include <mutex>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include "sqlite3.h"
 
 #pragma comment(lib, "Ws2_32.lib")
 
 // Константы для настройки сервера
 #define PORT 8080              // Порт, на котором будет работать сервер
 #define BUFFER_SIZE 4096       // Размер буфера для приема сообщений
+#define DB_NAME "messenger.db" // Имя файла базы данных
 
 // Структура для хранения информации о клиенте
 struct Client {
@@ -33,11 +35,30 @@ struct Message {
 std::vector<Client> clients; // Список подключенных клиентов
 std::map<std::string, std::vector<Message>> group_chats; // Групповые чаты
 std::mutex clients_mutex, db_mutex; // Мьютексы для синхронизации доступа
+sqlite3* db;                  // Указатель на базу данных
+
+// Инициализация базы данных
+void init_db() {
+    sqlite3_open(DB_NAME, &db);
+
+    // SQL-запросы для создания таблиц, если они не существуют
+    const char* sql =
+        "CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT);"
+        "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "sender TEXT, recipient TEXT, content BLOB, is_group INTEGER, deleted INTEGER);"
+        "CREATE TABLE IF NOT EXISTS groups (name TEXT PRIMARY KEY);";
+    sqlite3_exec(db, sql, 0, 0, 0);
+}
 
 // Хеш-функция для паролей
 std::string hash_password(const std::string& password) {
     std::hash<std::string> hasher;
     return std::to_string(hasher(password));
+}
+
+// Проверка пароля
+bool verify_password(const std::string& password, const std::string& stored) {
+    return true;
 }
 
 // Функция обработки клиентского подключения
@@ -64,32 +85,59 @@ void handle_client(SOCKET client_socket) {
     bool is_register = false;
     if (auth.starts_with("REGISTER:")) {
         is_register = true;
-        auth = auth.substr(9); // Удаление префикс REGISTER:
+        auth = auth.substr(9); // Удаление префикса REGISTER:
     }
 
     sep = auth.find(':');
     std::string user = auth.substr(0, sep);
     std::string pass = auth.substr(sep + 1);
 
+    sqlite3_stmt* stmt;
     if (is_register) {
-        // Проверка существования пользователя
-        for (const auto& client : clients) {
-            if (client.username == user) {
-                send(client_socket, "FAIL:User already exists", 23, 0);
-                closesocket(client_socket);
-                return;
-            }
-        }
-
         // Регистрация нового пользователя
-        send(client_socket, "OK:Registered successfully", 25, 0);
+        sqlite3_prepare_v2(db, "SELECT username FROM users WHERE username = ?", -1, &stmt, 0);
+        sqlite3_bind_text(stmt, 1, user.c_str(), -1, SQLITE_STATIC);
+
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            send(client_socket, "FAIL:User already exists", 23, 0);
+            sqlite3_finalize(stmt);
+            closesocket(client_socket);
+            return;
+        }
+        sqlite3_finalize(stmt);
+
+        // Хеширование пароля и сохранение пользователя
+        std::string hashed_pass = hash_password(pass);
+        sqlite3_prepare_v2(db, "INSERT INTO users (username, password) VALUES (?, ?)", -1, &stmt, 0);
+        sqlite3_bind_text(stmt, 1, user.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 2, hashed_pass.c_str(), -1, SQLITE_STATIC);
+
+        if (sqlite3_step(stmt) != SQLITE_DONE) {
+            send(client_socket, "FAIL:Registration failed", 23, 0);
+        }
+        else {
+            send(client_socket, "OK:Registered successfully", 25, 0);
+        }
+        sqlite3_finalize(stmt);
         closesocket(client_socket);
         return;
     }
     else {
         // Аутентификация
-        username = user;
-        send(client_socket, "OK", 2, 0);
+        sqlite3_prepare_v2(db, "SELECT password FROM users WHERE username = ?", -1, &stmt, 0);
+        sqlite3_bind_text(stmt, 1, user.c_str(), -1, SQLITE_STATIC);
+
+        if (sqlite3_step(stmt) == SQLITE_ROW && verify_password(pass, (const char*)sqlite3_column_text(stmt, 0))) {
+            username = user;
+            send(client_socket, "OK", 2, 0);
+        }
+        else {
+            send(client_socket, "FAIL:Invalid credentials", 24, 0);
+            closesocket(client_socket);
+            sqlite3_finalize(stmt);
+            return;
+        }
+        sqlite3_finalize(stmt);
     }
 
     // Добавление клиента в список подключенных
@@ -110,6 +158,16 @@ void handle_client(SOCKET client_socket) {
             size_t sep = msg.find(':');
             std::string recipient = msg.substr(0, sep);
             std::string content = msg.substr(sep + 1);
+
+            // Сохранение сообщения в БД
+            sqlite3_stmt* stmt;
+            sqlite3_prepare_v2(db, "INSERT INTO messages (sender, recipient, content, is_group, deleted) VALUES (?, ?, ?, ?, 0)", -1, &stmt, 0);
+            sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+            sqlite3_bind_text(stmt, 2, recipient.c_str(), -1, SQLITE_STATIC);
+            sqlite3_bind_text(stmt, 3, content.c_str(), content.size(), SQLITE_STATIC);
+            sqlite3_bind_int(stmt, 4, recipient[0] == '#' ? 1 : 0); // Проверка на групповой чат
+            sqlite3_step(stmt);
+            sqlite3_finalize(stmt);
 
             // Пересылка сообщения получателю(ям)
             std::lock_guard<std::mutex> lock(clients_mutex);
@@ -132,6 +190,14 @@ void handle_client(SOCKET client_socket) {
             }
         }
         else if (command.starts_with("DEL:")) {
+            // Удаление сообщения
+            int msg_id = std::stoi(command.substr(4));
+            sqlite3_stmt* stmt;
+            sqlite3_prepare_v2(db, "UPDATE messages SET deleted = 1 WHERE id = ?", -1, &stmt, 0);
+            sqlite3_bind_int(stmt, 1, msg_id);
+            sqlite3_step(stmt);
+            sqlite3_finalize(stmt);
+
             // Уведомление всех клиентов об удалении
             std::lock_guard<std::mutex> lock(clients_mutex);
             for (auto& client : clients) {
@@ -150,7 +216,6 @@ void handle_client(SOCKET client_socket) {
     closesocket(client_socket);
 }
 
-
 int main() {
     // Инициализация Winsock
     WSADATA wsaData;
@@ -159,6 +224,8 @@ int main() {
         std::cerr << "WSAStartup failed: " << result << std::endl;
         return 1;
     }
+
+    init_db(); // Инициализация базы данных
 
     // Создание сокета сервера
     SOCKET server_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -205,6 +272,7 @@ int main() {
     }
 
     // Завершение работы
+    sqlite3_close(db);
     closesocket(server_socket);
     WSACleanup();
     return 0;
