@@ -7,6 +7,10 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include "sqlite3.h"
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/rand.h>
+#include <openssl/sha.h>
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -14,11 +18,14 @@
 #define PORT 8080              // Порт, на котором будет работать сервер
 #define BUFFER_SIZE 4096       // Размер буфера для приема сообщений
 #define DB_NAME "messenger.db" // Имя файла базы данных
+#define KEY_LENGTH 2048        // Длина ключа шифрования
+#define DB_KEY "securepassword123" // Ключ для БД
 
 // Структура для хранения информации о клиенте
 struct Client {
     SOCKET socket;       // Сокет клиента
     std::string username; // Имя пользователя
+    EVP_PKEY* public_key;     // Публичный ключ клиента для шифрования
 };
 
 // Структура для хранения сообщений
@@ -52,19 +59,97 @@ void init_db() {
 
 // Хеш-функция для паролей
 std::string hash_password(const std::string& password) {
-    std::hash<std::string> hasher;
-    return std::to_string(hasher(password));
+    unsigned char salt[16];
+    RAND_bytes(salt, 16);  // Генерация случайной соли
+    unsigned char hash[32];
+
+    // Используем PBKDF2 с SHA-256 для хеширования
+    PKCS5_PBKDF2_HMAC(
+        password.c_str(), password.length(),
+        salt, 16,
+        100000,  // Количество итераций для замедления брутфорса
+        EVP_sha256(),
+        32,  // Размер хеша
+        hash
+    );
+
+    // Сохраняю соль и хеш вместе
+    std::string result = std::string((char*)salt, 16) + std::string((char*)hash, 32);
+    return result;
 }
 
 // Проверка пароля
 bool verify_password(const std::string& password, const std::string& stored) {
-    return true;
+    if (stored.size() != 48) return false;  // Проверка размера (16 соль + 32 хеш)
+
+    unsigned char salt[16];
+    memcpy(salt, stored.c_str(), 16);  // Извлечение солм
+
+    unsigned char hash[32];
+    // Повторное вычисление хеша с той же солью
+    PKCS5_PBKDF2_HMAC(
+        password.c_str(), password.length(),
+        salt, 16,
+        100000,
+        EVP_sha256(),
+        32,
+        hash
+    );
+
+    // Сравнение с сохраненным хешем
+    return memcmp(hash, stored.c_str() + 16, 32) == 0;
+}
+
+// Загрузка публичного ключа из строки
+EVP_PKEY* load_public_key(const std::string& key_str) {
+    BIO* bio = BIO_new_mem_buf(key_str.c_str(), -1);
+    EVP_PKEY* pkey = PEM_read_bio_PUBKEY(bio, NULL, NULL, NULL);
+    BIO_free(bio);
+    return pkey;
+}
+
+// Отправка зашифрованного сообщения клиенту
+void send_encrypted(SOCKET socket, const std::string& message, EVP_PKEY* public_key) {
+    // Генерация случайного ключа и вектора инициализации для AES
+    unsigned char key[32], iv[16];
+    RAND_bytes(key, 32);
+    RAND_bytes(iv, 16);
+
+    // Шифрование сообщения AES-256-CBC
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv);
+
+    int len;
+    std::vector<unsigned char> ciphertext(message.size() + EVP_MAX_BLOCK_LENGTH);
+    EVP_EncryptUpdate(ctx, ciphertext.data(), &len, (const unsigned char*)message.c_str(), message.length());
+    int ciphertext_len = len;
+    EVP_EncryptFinal_ex(ctx, ciphertext.data() + len, &len);
+    ciphertext_len += len;
+    EVP_CIPHER_CTX_free(ctx);
+
+    // Шифрование AES-ключа с помощью RSA-OAEP
+    EVP_PKEY_CTX* pctx = EVP_PKEY_CTX_new(public_key, NULL);
+    EVP_PKEY_encrypt_init(pctx);
+    EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_OAEP_PADDING);
+
+    size_t encrypted_key_len;
+    EVP_PKEY_encrypt(pctx, NULL, &encrypted_key_len, key, sizeof(key));
+    std::vector<unsigned char> encrypted_key(encrypted_key_len);
+    EVP_PKEY_encrypt(pctx, encrypted_key.data(), &encrypted_key_len, key, sizeof(key));
+    EVP_PKEY_CTX_free(pctx);
+
+    // Отправка зашифрованного ключа, IV и сообщения
+    send(socket, (const char*)&encrypted_key_len, sizeof(size_t), 0);
+    send(socket, (const char*)encrypted_key.data(), encrypted_key_len, 0);
+    send(socket, (const char*)iv, 16, 0);
+    send(socket, (const char*)ciphertext.data(), ciphertext_len, 0);
 }
 
 // Функция обработки клиентского подключения
 void handle_client(SOCKET client_socket) {
     char buffer[BUFFER_SIZE];
     std::string username;
+    EVP_PKEY* public_key = nullptr;
 
     // Аутентификация клиента
     int len = recv(client_socket, buffer, BUFFER_SIZE, 0);
@@ -140,6 +225,14 @@ void handle_client(SOCKET client_socket) {
         sqlite3_finalize(stmt);
     }
 
+    // Получение публичного ключа от клиента
+    len = recv(client_socket, buffer, BUFFER_SIZE, 0);
+    if (len <= 0) {
+        closesocket(client_socket);
+        return;
+    }
+    public_key = load_public_key(std::string(buffer, len));
+
     // Добавление клиента в список подключенных
     {
         std::lock_guard<std::mutex> lock(clients_mutex);
@@ -175,7 +268,7 @@ void handle_client(SOCKET client_socket) {
                 // Групповое сообщение
                 for (const auto& client : clients) {
                     if (client.username != username) { // Не отправляем себе
-                        send(client.socket, command.c_str(), command.size(), 0);
+                        send_encrypted(client.socket, command, client.public_key);
                     }
                 }
             }
@@ -183,7 +276,7 @@ void handle_client(SOCKET client_socket) {
                 // Личное сообщение
                 for (const auto& client : clients) {
                     if (client.username == recipient) {
-                        send(client.socket, command.c_str(), command.size(), 0);
+                        send_encrypted(client.socket, command, client.public_key);
                         break;
                     }
                 }
@@ -201,7 +294,7 @@ void handle_client(SOCKET client_socket) {
             // Уведомление всех клиентов об удалении
             std::lock_guard<std::mutex> lock(clients_mutex);
             for (auto& client : clients) {
-                send(client.socket, command.c_str(), command.size(), 0);
+                send_encrypted(client.socket, command, client.public_key);
             }
         }
     }
@@ -213,6 +306,7 @@ void handle_client(SOCKET client_socket) {
             [&](const Client& c) { return c.socket == client_socket; }), clients.end());
     }
 
+    EVP_PKEY_free(public_key);
     closesocket(client_socket);
 }
 

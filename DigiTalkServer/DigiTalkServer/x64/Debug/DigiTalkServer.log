@@ -1,2 +1,8 @@
-﻿  sqlite3.c
+﻿  DigiTalkServer.cpp
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(68,42): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(91,42): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(124,106): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(143,53): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(260,69): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+  sqlite3.c
   DigiTalkServer.vcxproj -> D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\x64\Debug\DigiTalkServer.exe
