@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace DigiTalk.ViewModels
+namespace DigiTalk.Models
 {
-    internal class MainWindowViewModel
+    internal class Contact
     {
     }
 }

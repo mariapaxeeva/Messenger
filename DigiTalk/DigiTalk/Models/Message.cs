@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace DigiTalk.Models
 {
-    internal class UserModel
+    internal class Message
     {
     }
 }

@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace DigiTalk.Utility
+namespace DigiTalk.ViewModels
 {
-    internal class BoolToColorConverter
+    internal class MainViewModel
     {
     }
 }

@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace DigiTalk.Services
+namespace DigiTalk.Models
 {
-    internal class NetworkService
+    internal class LoginDialogResult
     {
     }
 }
