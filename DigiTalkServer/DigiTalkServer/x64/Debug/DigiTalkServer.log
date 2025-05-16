@@ -3,10 +3,10 @@ D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkS
 D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(91,42): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
 D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(124,106): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
 D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(143,53): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(291,68): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(311,74): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(334,74): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-  sqlite3.c
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(319,68): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(339,74): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(363,74): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(368,62): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
   DigiTalkServer.vcxproj -> D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\x64\Debug\DigiTalkServer.exe
   "pwsh.exe" не является внутренней или внешней
   командой, исполняемой программой или пакетным файлом.

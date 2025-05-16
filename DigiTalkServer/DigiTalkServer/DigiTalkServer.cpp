@@ -172,6 +172,35 @@ std::string list_contacts() {
     return contacts_list;
 }
 
+// Извлечение истории сообщений пользователя с recipient из БД
+std::string history_messages(std::string username, std::string recipient) {
+    sqlite3_stmt* stmt;
+    std::string query = "SELECT id, sender, content, strftime('%s', timestamp) FROM messages WHERE deleted = 0 AND "
+        "((sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?)) "
+        "ORDER BY timestamp ASC";
+
+    sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, 0);
+    sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, recipient.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, recipient.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, username.c_str(), -1, SQLITE_STATIC);
+
+    std::string history = "HISTORY:";
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        int id = sqlite3_column_int(stmt, 0);
+        const char* sender = (const char*)sqlite3_column_text(stmt, 1);
+        const char* content = (const char*)sqlite3_column_text(stmt, 2);
+        time_t timestamp = sqlite3_column_int64(stmt, 3);
+
+        history += std::to_string(id) + ":" + sender + ":" + std::to_string(timestamp) + ":" + content + "|";
+    }
+    sqlite3_finalize(stmt);
+
+    if (history.back() == '|') history.pop_back(); // Удаление последнего разделителя
+
+    return history;
+}
+
 // Функция обработки клиентского подключения
 void handle_client(SOCKET client_socket) {
     char buffer[BUFFER_SIZE];
@@ -330,8 +359,14 @@ void handle_client(SOCKET client_socket) {
             }
         }
         else if (command.starts_with("GET_CONTACTS")) {
+            // Формирование списка контактов и его отправка клиенту
             std::string contacts_list = list_contacts();
             send(client_socket, contacts_list.c_str(), contacts_list.size(), 0);
+        }
+        else if (command.starts_with("GET_HISTORY:")) {
+            // Отправка истории сообщений клиенту
+            std::string history = history_messages(username, command.substr(12)); // Формат command: GET_HISTORY:username
+            send(client_socket, history.c_str(), history.size(), 0);
         }
     }
 
