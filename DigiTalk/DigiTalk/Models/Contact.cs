@@ -1,12 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace DigiTalk.Models
+﻿// Модель контакта (пользователь)
+public class Contact
 {
-    internal class Contact
-    {
-    }
+    public string Name { get; set; } // Имя
+    public bool IsGroup { get; set; } // Является ли группой
 }
