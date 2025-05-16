@@ -1,27 +1,29 @@
+<!--Диалоговое окно для входа и регистрации-->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="250"
 		x:Class="DigiTalk.Views.LoginDialog"
+		Icon="/Assets/login-logo.ico"
         Title="Login"
         Width="300" Height="250"
 		WindowStartupLocation="CenterOwner">
-
+	
 	<StackPanel Margin="10" Spacing="10">
 		<TextBlock Text="Welcome to DigiTalk" FontSize="16" HorizontalAlignment="Center"/>
 
 		<StackPanel Spacing="5">
 			<TextBlock Text="Username:"/>
-			<TextBox x:Name="UsernameTextBox" Watermark="Enter username" />
+			<TextBox x:Name="UsernameTextBox" Watermark="Enter username" Text="{Binding Username}" />
 		</StackPanel>
 
 		<StackPanel Spacing="5">
 			<TextBlock Text="Password:"/>
-			<TextBox x:Name="PasswordTextBox" Watermark="Enter password" PasswordChar="*"/>
+			<TextBox x:Name="PasswordTextBox" Watermark="Enter password" Text="{Binding Password}" PasswordChar="*"/>
 		</StackPanel>
 
-		<CheckBox x:Name="RegisterCheckBox" Content="Register new account"/>
+		<CheckBox x:Name="RegisterCheckBox" Content="Register new account" IsChecked="{Binding IsRegister}"/>
 
 		<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="5">
 			<Button Content="Cancel" Click="CancelButton_Click" Width="80"/>
