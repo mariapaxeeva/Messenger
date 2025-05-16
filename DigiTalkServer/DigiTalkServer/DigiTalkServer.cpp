@@ -52,7 +52,7 @@ void init_db() {
     const char* sql =
         "CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT);"
         "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, "
-        "sender TEXT, recipient TEXT, content BLOB, is_group INTEGER, deleted INTEGER);"
+        "sender TEXT, recipient TEXT, content BLOB, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, is_group INTEGER, deleted INTEGER);"
         "CREATE TABLE IF NOT EXISTS groups (name TEXT PRIMARY KEY);";
     sqlite3_exec(db, sql, 0, 0, 0);
 }
@@ -143,6 +143,33 @@ void send_encrypted(SOCKET socket, const std::string& message, EVP_PKEY* public_
     send(socket, (const char*)encrypted_key.data(), encrypted_key_len, 0);
     send(socket, (const char*)iv, 16, 0);
     send(socket, (const char*)ciphertext.data(), ciphertext_len, 0);
+}
+
+// Формирование списка пользователей и групп
+std::string list_contacts() {
+    // Формирование списка пользователей
+    std::string contacts_list = "CONTACTS:";
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(db, "SELECT username FROM users", -1, &stmt, 0);
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        contacts_list += (const char*)sqlite3_column_text(stmt, 0);
+        contacts_list += ",";
+    }
+    sqlite3_finalize(stmt);
+
+    // Формирование списка групп
+    contacts_list += "|GROUPS:";
+    sqlite3_prepare_v2(db, "SELECT name FROM groups", -1, &stmt, 0);
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        contacts_list += (const char*)sqlite3_column_text(stmt, 0);
+        contacts_list += ",";
+    }
+    sqlite3_finalize(stmt);
+    contacts_list += "\n";
+
+    return contacts_list;
 }
 
 // Функция обработки клиентского подключения
@@ -248,17 +275,22 @@ void handle_client(SOCKET client_socket) {
         if (command.starts_with("MSG:")) {
             // Обработка сообщения
             std::string msg = command.substr(4);
-            size_t sep = msg.find(':');
-            std::string recipient = msg.substr(0, sep);
-            std::string content = msg.substr(sep + 1);
+            size_t sep1 = msg.find(':');
+            size_t sep2 = msg.find(':', sep1 + 1);
+            std::string recipient = msg.substr(0, sep1);
+            time_t timestamp = std::stol(msg.substr(sep1 + 1, sep2 - sep1 - 1));
+            std::string content = msg.substr(sep2 + 1);
+
+            command = "MSG:" + username + msg.substr(sep1);
 
             // Сохранение сообщения в БД
             sqlite3_stmt* stmt;
-            sqlite3_prepare_v2(db, "INSERT INTO messages (sender, recipient, content, is_group, deleted) VALUES (?, ?, ?, ?, 0)", -1, &stmt, 0);
+            sqlite3_prepare_v2(db, "INSERT INTO messages (sender, recipient, content, is_group, deleted, timestamp) VALUES (?, ?, ?, ?, 0, datetime(?, 'unixepoch'))", -1, &stmt, 0);
             sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
             sqlite3_bind_text(stmt, 2, recipient.c_str(), -1, SQLITE_STATIC);
-            sqlite3_bind_text(stmt, 3, content.c_str(), content.size(), SQLITE_STATIC);
+            sqlite3_bind_text(stmt, 3, content.data(), content.size(), SQLITE_STATIC);
             sqlite3_bind_int(stmt, 4, recipient[0] == '#' ? 1 : 0); // Проверка на групповой чат
+            sqlite3_bind_int64(stmt, 5, timestamp);
             sqlite3_step(stmt);
             sqlite3_finalize(stmt);
 
@@ -275,8 +307,8 @@ void handle_client(SOCKET client_socket) {
             else {
                 // Личное сообщение
                 for (const auto& client : clients) {
-                    if (client.username == recipient) {
-                        send_encrypted(client.socket, command, client.public_key);
+                    if (client.username == recipient && client.username != username) {
+                        send(client.socket, command.c_str(), command.size(), 0);
                         break;
                     }
                 }
@@ -296,6 +328,10 @@ void handle_client(SOCKET client_socket) {
             for (auto& client : clients) {
                 send_encrypted(client.socket, command, client.public_key);
             }
+        }
+        else if (command.starts_with("GET_CONTACTS")) {
+            std::string contacts_list = list_contacts();
+            send(client_socket, contacts_list.c_str(), contacts_list.size(), 0);
         }
     }
 
