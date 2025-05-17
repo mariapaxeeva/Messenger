@@ -253,15 +253,16 @@ void handle_client(SOCKET client_socket) {
         sqlite3_bind_text(stmt, 1, user.c_str(), -1, SQLITE_STATIC);
         sqlite3_bind_text(stmt, 2, hashed_pass.c_str(), -1, SQLITE_STATIC);
 
-        if (sqlite3_step(stmt) != SQLITE_DONE) {
-            send(client_socket, "FAIL:Registration failed", 23, 0);
-        }
-        else {
+        if (sqlite3_step(stmt) == SQLITE_DONE) {
+            username = user;
             send(client_socket, "OK:Registered successfully", 25, 0);
         }
-        sqlite3_finalize(stmt);
-        closesocket(client_socket);
-        return;
+        else {
+            send(client_socket, "FAIL:Registration failed", 23, 0);
+            closesocket(client_socket);
+            sqlite3_finalize(stmt);
+            return;
+        }
     }
     else {
         // Аутентификация
@@ -270,7 +271,7 @@ void handle_client(SOCKET client_socket) {
 
         if (sqlite3_step(stmt) == SQLITE_ROW && verify_password(pass, (const char*)sqlite3_column_text(stmt, 0))) {
             username = user;
-            send(client_socket, "OK", 2, 0);
+            send(client_socket, "OK: Authentification successfully", 2, 0);
         }
         else {
             send(client_socket, "FAIL:Invalid credentials", 24, 0);
@@ -278,8 +279,8 @@ void handle_client(SOCKET client_socket) {
             sqlite3_finalize(stmt);
             return;
         }
-        sqlite3_finalize(stmt);
     }
+    sqlite3_finalize(stmt);
 
     // Получение публичного ключа от клиента
     len = recv(client_socket, buffer, BUFFER_SIZE, 0);
