@@ -41,7 +41,15 @@ namespace DigiTalk.ViewModels
         public Contact SelectedContact
         {
             get => _selectedContact;
-            set => this.RaiseAndSetIfChanged(ref _selectedContact, value);
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedContact, value);
+                Messages.Clear();
+                if (value != null)
+                {
+                    LoadMessageHistory();
+                }
+            }
         }
 
         public ObservableCollection<Contact> Contacts { get; } = new();
@@ -88,6 +96,15 @@ namespace DigiTalk.ViewModels
                 SendMessageToStream(authData);
 
                 var response = ReceiveMessageFromStream();
+                if (isRegister)
+                {
+                    if (!response.StartsWith("OK"))
+                    {
+                        StatusMessage = $"Registration failed: {response}";
+                        return;
+                    }
+                    StatusMessage = $"Registered successfully as {username}";
+                }
                 if (!response.StartsWith("OK"))
                 {
                     StatusMessage = $"Connection failed: {response}";
@@ -167,6 +184,10 @@ namespace DigiTalk.ViewModels
                         {
                             ProcessContactsList(message);
                         }
+                        else if (message.StartsWith("HISTORY:"))
+                        {
+                            ProcessHistoryMessages(message);
+                        }
                         else if (message.StartsWith("MSG:"))
                         {
                             ProcessIncomingMessage(message);
@@ -197,6 +218,42 @@ namespace DigiTalk.ViewModels
 
             foreach (var group in groups)
                 Contacts.Add(new Contact { Name = group, IsGroup = true });
+        }
+
+        private async void LoadMessageHistory()
+        {
+            if (SelectedContact == null) return;
+
+            try
+            {
+                var request = $"GET_HISTORY:{SelectedContact.Name}";
+                SendMessageToStream(request);
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"History load error: {ex.Message}";
+            }
+        }
+
+        private void ProcessHistoryMessages(string message)
+        {
+            var historyItems = message.Substring(8).Split('|');
+            foreach (var item in historyItems)
+            {
+                var parts = item.Split(':');
+                if (parts.Length >= 4)
+                {
+                    var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(parts[2])).DateTime;
+
+                    Messages.Add(new Message
+                    {
+                        Sender = parts[1],
+                        Content = string.Join(":", parts.Skip(3)), // На случай, если в сообщении есть ':'
+                        Timestamp = timestamp,
+                        IsOwnMessage = parts[1] == _username
+                    });
+                }
+            }
         }
 
         private void ProcessIncomingMessage(string message)
