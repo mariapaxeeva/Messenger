@@ -57,11 +57,11 @@
 						<ItemsControl.ItemTemplate>
 							<DataTemplate>
 								<Border Margin="5" CornerRadius="5"
-                                        Background="{Binding IsOwnMessage, Converter={StaticResource MessageBackgroundConverter}}"
-                                        Padding="10" HorizontalAlignment="{Binding IsOwnMessage, Converter={StaticResource MessageAlignmentConverter}}">
+                                        Background="{Binding IsOwnMessage}"
+                                        Padding="10" HorizontalAlignment="{Binding IsOwnMessage}">
 									<StackPanel>
 										<TextBlock Text="{Binding Sender}" FontWeight="Bold"
-                                                   Foreground="{Binding IsOwnMessage, Converter={StaticResource SenderColorConverter}}"/>
+                                                   Foreground="{Binding IsOwnMessage}"/>
 										<TextBlock Text="{Binding Content}" TextWrapping="Wrap"/>
 										<TextBlock Text="{Binding Timestamp, StringFormat='HH:mm'}"
                                                    FontSize="10" HorizontalAlignment="Right"/>
