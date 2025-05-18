@@ -1,12 +1,16 @@
 ﻿  DigiTalkServer.cpp
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(68,42): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(91,42): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(124,106): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(143,53): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(321,68): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(341,74): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(365,74): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(370,62): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(72,42): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(95,42): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(128,106): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(147,53): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(213,62): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(247,26): warning C4244: инициализация: преобразование "sqlite3_int64" в "int", возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(252,64): warning C4244: аргумент: преобразование "sqlite3_int64" в "int", возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(280,64): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(402,68): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(422,74): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(446,74): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(451,62): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
   DigiTalkServer.vcxproj -> D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\x64\Debug\DigiTalkServer.exe
   "pwsh.exe" не является внутренней или внешней
   командой, исполняемой программой или пакетным файлом.

@@ -52,8 +52,12 @@ void init_db() {
     const char* sql =
         "CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT);"
         "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, "
-        "sender TEXT, recipient TEXT, content BLOB, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, is_group INTEGER, deleted INTEGER);"
-        "CREATE TABLE IF NOT EXISTS groups (name TEXT PRIMARY KEY);";
+            "sender TEXT, recipient TEXT, content BLOB, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, is_group INTEGER, deleted INTEGER);"
+        "CREATE TABLE IF NOT EXISTS groups(id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "name TEXT UNIQUE NOT NULL, creator TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);"
+        "CREATE TABLE IF NOT EXISTS group_members(group_id INTEGER NOT NULL, "
+            "username TEXT NOT NULL, joined_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(group_id, username), "
+            "FOREIGN KEY(group_id) REFERENCES groups(id), FOREIGN KEY(username) REFERENCES users(username));";
     sqlite3_exec(db, sql, 0, 0, 0);
 }
 
@@ -199,6 +203,83 @@ std::string history_messages(std::string username, std::string recipient) {
     if (history.back() == '|') history.pop_back(); // Удаление последнего разделителя
 
     return history;
+}
+
+// Уведомление пользователя о его присоединении к групповому чату
+void notify_user(const std::string& username, const std::string& message) {
+    std::lock_guard<std::mutex> lock(clients_mutex);
+    for (const auto& client : clients) {
+        if (client.username == username) {
+            send(client.socket, message.c_str(), message.size(), 0);
+            break;
+        }
+    }
+}
+
+// Получение ключа шифрования
+EVP_PKEY* get_user_key(const std::string& username) {
+    std::lock_guard<std::mutex> lock(clients_mutex);
+    for (const auto& client : clients) {
+        if (client.username == username) {
+            return client.public_key;
+        }
+    }
+    return nullptr;
+}
+
+// Обработчик команды создания группового чата
+void create_group(SOCKET client_socket, const std::string& username, const std::string& command) {
+    if (command.starts_with("CREATE_GROUP:")) {
+        size_t name_end = command.find(':', 13);
+        if (name_end == std::string::npos) return;
+
+        std::string group_name = command.substr(13, name_end - 13);
+        std::string members_str = command.substr(name_end + 1);
+
+        // Создание группы в базе данных
+        sqlite3_stmt* stmt;
+        const char* sql = "INSERT INTO groups (name, creator) VALUES (?, ?)";
+        sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+        sqlite3_bind_text(stmt, 1, group_name.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 2, username.c_str(), -1, SQLITE_STATIC);
+
+        if (sqlite3_step(stmt) == SQLITE_DONE) {
+            int group_id = sqlite3_last_insert_rowid(db);
+
+            // Добавление создателя в группу
+            sqlite3_finalize(stmt);
+            sqlite3_prepare_v2(db, "INSERT INTO group_members (group_id, username) VALUES (?, ?)", -1, &stmt, 0);
+            sqlite3_bind_int(stmt, 1, sqlite3_last_insert_rowid(db));
+            sqlite3_bind_text(stmt, 2, username.c_str(), -1, SQLITE_STATIC);
+            sqlite3_step(stmt);
+
+            // Добавление участников в группу
+            std::vector<std::string> members;
+            size_t pos = 0;
+            while ((pos = members_str.find(',')) != std::string::npos) {
+                members.push_back(members_str.substr(0, pos));
+                members_str.erase(0, pos + 1);
+            }
+            if (!members_str.empty()) {
+                members.push_back(members_str);
+            }
+
+            for (const auto& member : members) {
+                sqlite3_prepare_v2(db, "INSERT INTO group_members (group_id, username) VALUES (?, ?)", -1, &stmt, 0);
+                sqlite3_bind_int(stmt, 1, group_id);
+                sqlite3_bind_text(stmt, 2, member.c_str(), -1, SQLITE_STATIC);
+                sqlite3_step(stmt);
+                sqlite3_finalize(stmt);
+
+                // Уведомление участника
+                notify_user(member, "GROUP_JOINED:" + group_name + ":" + username);
+            }
+
+            // Уведомление создателя
+            std::string responce = "GROUP_CREATED:" + group_name;
+            send(client_socket, responce.c_str(), responce.size(), 0);
+        }
+    }
 }
 
 // Функция обработки клиентского подключения
@@ -368,6 +449,9 @@ void handle_client(SOCKET client_socket) {
             // Отправка истории сообщений клиенту
             std::string history = history_messages(username, command.substr(12)); // Формат command: GET_HISTORY:username
             send(client_socket, history.c_str(), history.size(), 0);
+        }
+        else if (command.starts_with("CREATE_GROUP:")) {
+            create_group(client_socket, username, command);
         }
     }
 
