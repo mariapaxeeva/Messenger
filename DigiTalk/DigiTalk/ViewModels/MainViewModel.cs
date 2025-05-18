@@ -1,4 +1,5 @@
-﻿using System;
+﻿// Логика главного окна мессенджера
+using System;
 using System.Collections.ObjectModel;
 using System.Net.Sockets;
 using System.Reactive;
@@ -8,9 +9,9 @@ using Avalonia.Controls;
 using ReactiveUI;
 using System.Threading.Tasks;
 using DigiTalk.Models;
-using DigiTalk.ViewModels;
 using DigiTalk.Views;
 using System.Linq;
+using System.Security.Cryptography;
 
 namespace DigiTalk.ViewModels
 {
@@ -58,12 +59,18 @@ namespace DigiTalk.ViewModels
         public ReactiveCommand<Unit, Unit> SendMessageCommand { get; }
         public ReactiveCommand<Unit, Unit> RefreshContactsCommand { get; }
         public ReactiveCommand<Window, Unit> LoginCommand { get; }
+        public ReactiveCommand<Window, Unit> CreateGroupCommand { get; }
+        public ReactiveCommand<Unit, Unit> JoinGroupCommand { get; }
+        public ReactiveCommand<Unit, Unit> LeaveGroupCommand { get; }
+        public ReactiveCommand<Unit, Unit> InviteToGroupCommand { get; }
 
         public MainViewModel()
         {
             SendMessageCommand = ReactiveCommand.Create(SendMessage);
             RefreshContactsCommand = ReactiveCommand.Create(RefreshContacts);
             LoginCommand = ReactiveCommand.CreateFromTask<Window>(LoginAsync);
+            CreateGroupCommand = ReactiveCommand.CreateFromTask<Window>(CreateGroupAsync);
+            LeaveGroupCommand = ReactiveCommand.Create(LeaveGroup);
         }
 
         private async Task LoginAsync(Window window)
@@ -192,6 +199,17 @@ namespace DigiTalk.ViewModels
                         {
                             ProcessIncomingMessage(message);
                         }
+                        else if (message.StartsWith("GROUP_MSG:"))
+                        {
+                            ProcessGroupMessages(message);
+                        }
+                        else if (message.StartsWith("GROUP_CREATED:"))
+                        {
+                            // Формат: GROUP_CREATED:groupname
+                            var groupName = message.Substring(14);
+                            Contacts.Add(new Contact { Name = groupName, IsGroup = true });
+                            StatusMessage = $"Group successfully created: {groupName}";
+                        }
                     });
                 }
             }
@@ -220,7 +238,7 @@ namespace DigiTalk.ViewModels
                 Contacts.Add(new Contact { Name = group, IsGroup = true });
         }
 
-        private async void LoadMessageHistory()
+        private void LoadMessageHistory()
         {
             if (SelectedContact == null) return;
 
@@ -256,19 +274,72 @@ namespace DigiTalk.ViewModels
             }
         }
 
+        private void ProcessGroupMessages(string message)
+        {
+            var parts = message.Substring(10).Split(':');
+            if (parts.Length >= 3)
+            {
+                var groupName = parts[0];
+                var sender = parts[1];
+                var content = string.Join(":", parts.Skip(2));
+
+                Messages.Add(new Message
+                {
+                    Sender = sender,
+                    Recipient = groupName,
+                    Content = content,
+                    Timestamp = DateTime.Now,
+                    IsGroupMessage = true,
+                    IsOwnMessage = sender == _username
+                });
+            }
+        }
+
+        private async Task CreateGroupAsync(Window window)
+        {
+            // Фильтр контактов (исключает текущего пользователя и группы)
+            var filteredContacts = Contacts
+                .Where(c => c.Name != _username && !c.IsGroup)
+                .ToList();
+
+            var dialog = new CreateGroupDialog()
+            {
+                DataContext = new GroupDialogViewModel(filteredContacts)
+            };
+
+            var result = await dialog.ShowDialog<GroupCreationResult>(window); 
+            if (result?.Result == true)
+            {
+                // Формирование команды для сервера: CREATE_GROUP:groupname:member1,member2,member3
+                var members = string.Join(",", result.MemberUsernames);
+                var command = $"CREATE_GROUP:{result.Groupname}:{members}";
+                SendMessageToStream(command);
+
+                // Локальное добавление группы в список контактов
+                Contacts.Add(new Contact
+                {
+                    Name = result.Groupname,
+                    IsGroup = true
+                });
+            }
+        }
         private void ProcessIncomingMessage(string message)
         {
             var parts = message.Substring(4).Split(':');
             if (parts.Length >= 3)
             {
                 var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(parts[1])).DateTime;
+                var sender = parts[0];
+                var content = string.Join(":", parts.Skip(2));
+                var isGroup = sender.StartsWith("#"); // Групповые сообщения имеют префикс #
 
                 Messages.Add(new Message
                 {
-                    Sender = parts[0],
-                    Content = string.Join(":", parts.Skip(2)),
+                    Sender = sender,
+                    Content = content,
                     Timestamp = timestamp,
-                    IsOwnMessage = false
+                    IsOwnMessage = false,
+                    IsGroupMessage = isGroup
                 });
             }
         }

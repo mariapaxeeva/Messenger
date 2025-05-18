@@ -1,4 +1,4 @@
-﻿using DigiTalk.Views;
+﻿// Логика окна авторизации и регистрации
 using ReactiveUI;
 
 namespace DigiTalk.ViewModels

@@ -1,0 +1,42 @@
+<!-- Диалоговое окно для создания группового чата -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="500"
+		x:Class="DigiTalk.Views.CreateGroupDialog"
+		Icon="/Assets/icons/group-logo.ico"
+        Title="Create group"
+        Width="400" Height="500"
+		WindowStartupLocation="CenterOwner">
+	
+	<Grid RowDefinitions="Auto,*,Auto">
+		<!-- Поле для ввода названия группы -->
+		<StackPanel Grid.Row="0" Margin="10" Spacing="5">
+			<TextBlock Text="Group name:"/>
+			<TextBox Text="{Binding Groupname}" Watermark="Enter group name"/>
+		</StackPanel>
+
+		<!-- Выбор участников -->
+		<StackPanel Grid.Row="1" Margin="10" Spacing="5">
+			<TextBlock Text="Select members:"/>
+			<ScrollViewer VerticalScrollBarVisibility="Visible" Height="340">
+				<ListBox ItemsSource="{Binding Contacts}" SelectionMode="Multiple">
+					<ListBox.ItemTemplate>
+						<DataTemplate>
+							<CheckBox Content="{Binding Contact.Name}"
+									  IsChecked="{Binding IsSelected}"/>
+						</DataTemplate>
+					</ListBox.ItemTemplate>
+				</ListBox>
+			</ScrollViewer>
+		</StackPanel>
+
+		<!-- Кнопки -->
+		<StackPanel Grid.Row="2" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Spacing="5" Margin="10">
+			<Button Content="Cancel" Width="80" Click="CancelButton_Click"/>
+			<Button Content="Create" Width="80" Click="CreateButton_Click"/>
+		</StackPanel>
+	</Grid>
+</Window>
