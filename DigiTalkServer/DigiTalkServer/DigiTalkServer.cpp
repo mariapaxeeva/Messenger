@@ -150,7 +150,7 @@ void send_encrypted(SOCKET socket, const std::string& message, EVP_PKEY* public_
 }
 
 // Формирование списка пользователей и групп
-std::string list_contacts() {
+std::string list_contacts(const std::string& username) {
     // Формирование списка пользователей
     std::string contacts_list = "CONTACTS:";
     sqlite3_stmt* stmt;
@@ -164,7 +164,11 @@ std::string list_contacts() {
 
     // Формирование списка групп
     contacts_list += "|GROUPS:";
-    sqlite3_prepare_v2(db, "SELECT name FROM groups", -1, &stmt, 0);
+    sqlite3_prepare_v2(db,
+        "SELECT g.name FROM groups g "
+        "JOIN group_members gm ON g.id = gm.group_id "
+        "WHERE gm.username = ?", -1, &stmt, 0);
+    sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
 
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         contacts_list += (const char*)sqlite3_column_text(stmt, 0);
@@ -172,10 +176,16 @@ std::string list_contacts() {
     }
     sqlite3_finalize(stmt);
 
+    // Удаление последней запятой, если она есть
+    if (!contacts_list.empty() && contacts_list.back() == ',') {
+        contacts_list.pop_back();
+    }
+
     return contacts_list;
 }
 
-std::string history_messages(std::string& username, std::string& recipient) {
+// Извлечение истории сообщений пользователя с recipient из БД
+std::string history_messages(const std::string& username, const std::string& recipient) {
     sqlite3_stmt* stmt;
     std::string query;
     std::string group_name;
@@ -468,7 +478,7 @@ void handle_client(SOCKET client_socket) {
         }
         else if (command.starts_with("GET_CONTACTS")) {
             // Формирование списка контактов и его отправка клиенту
-            std::string contacts_list = list_contacts();
+            std::string contacts_list = list_contacts(username);
             send(client_socket, contacts_list.c_str(), contacts_list.size(), 0);
         }
         else if (command.starts_with("GET_HISTORY:")) {
