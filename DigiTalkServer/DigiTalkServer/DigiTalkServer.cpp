@@ -171,23 +171,43 @@ std::string list_contacts() {
         contacts_list += ",";
     }
     sqlite3_finalize(stmt);
-    contacts_list += "\n";
 
     return contacts_list;
 }
 
-// Извлечение истории сообщений пользователя с recipient из БД
-std::string history_messages(std::string username, std::string recipient) {
+std::string history_messages(std::string& username, std::string& recipient) {
     sqlite3_stmt* stmt;
-    std::string query = "SELECT id, sender, content, strftime('%s', timestamp) FROM messages WHERE deleted = 0 AND "
-        "((sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?)) "
-        "ORDER BY timestamp ASC";
+    std::string query;
+    std::string group_name;
 
-    sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, 0);
-    sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 2, recipient.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 3, recipient.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 4, username.c_str(), -1, SQLITE_STATIC);
+    // Проверка, является ли получатель группой (начинается с #)
+    bool is_group = (recipient[0] == '#');
+
+    if (is_group) {
+        // Для групп: извлечение из БД всех сообщений, адресованных этой группе
+        group_name = recipient.substr(1); // Удаление префикса #
+        query = "SELECT id, sender, content, strftime('%s', timestamp) FROM messages "
+            "WHERE deleted = 0 AND recipient = ? AND is_group = 1 "
+            "ORDER BY timestamp ASC";
+
+        sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, 0);
+        int bind_result = sqlite3_bind_text(stmt, 1, group_name.c_str(), -1, SQLITE_STATIC);
+        if (bind_result != SQLITE_OK) {
+            std::cerr << "Bind failed: " << sqlite3_errmsg(db) << std::endl;
+        }
+    }
+    else {
+        // Для личных сообщений: получение из БД переписки между двумя пользователями
+        query = "SELECT id, sender, content, strftime('%s', timestamp) FROM messages WHERE deleted = 0 AND "
+            "((sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?)) "
+            "ORDER BY timestamp ASC";
+
+        sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, 0);
+        sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 2, recipient.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 3, recipient.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 4, username.c_str(), -1, SQLITE_STATIC);
+    }
 
     std::string history = "HISTORY:";
     while (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -394,24 +414,30 @@ void handle_client(SOCKET client_socket) {
 
             command = "MSG:" + username + msg.substr(sep1);
 
+            // Удаление решетки у recipient, если она есть, для записи в БД
+            bool is_group = (recipient[0] == '#');
+            if (is_group) {
+                recipient = recipient.substr(1);
+            }
+
             // Сохранение сообщения в БД
             sqlite3_stmt* stmt;
             sqlite3_prepare_v2(db, "INSERT INTO messages (sender, recipient, content, is_group, deleted, timestamp) VALUES (?, ?, ?, ?, 0, datetime(?, 'unixepoch'))", -1, &stmt, 0);
             sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
             sqlite3_bind_text(stmt, 2, recipient.c_str(), -1, SQLITE_STATIC);
             sqlite3_bind_text(stmt, 3, content.data(), content.size(), SQLITE_STATIC);
-            sqlite3_bind_int(stmt, 4, recipient[0] == '#' ? 1 : 0); // Проверка на групповой чат
+            sqlite3_bind_int(stmt, 4, is_group ? 1 : 0); // Проверка на групповой чат
             sqlite3_bind_int64(stmt, 5, timestamp);
             sqlite3_step(stmt);
             sqlite3_finalize(stmt);
 
             // Пересылка сообщения получателю(ям)
             std::lock_guard<std::mutex> lock(clients_mutex);
-            if (recipient[0] == '#') {
+            if (is_group) {
                 // Групповое сообщение
                 for (const auto& client : clients) {
                     if (client.username != username) { // Не отправляем себе
-                        send_encrypted(client.socket, command, client.public_key);
+                        send(client.socket, command.c_str(), command.size(), 0);
                     }
                 }
             }
@@ -447,7 +473,8 @@ void handle_client(SOCKET client_socket) {
         }
         else if (command.starts_with("GET_HISTORY:")) {
             // Отправка истории сообщений клиенту
-            std::string history = history_messages(username, command.substr(12)); // Формат command: GET_HISTORY:username
+            std::string recipient = command.substr(12);
+            std::string history = history_messages(username, recipient);
             send(client_socket, history.c_str(), history.size(), 0);
         }
         else if (command.starts_with("CREATE_GROUP:")) {
