@@ -258,6 +258,31 @@ EVP_PKEY* get_user_key(const std::string& username) {
 }
 
 // Обработчик команды создания группового чата
+std::string list_members(const std::string& groupname) {
+    sqlite3_stmt* stmt;
+    std::string query =
+        "SELECT username FROM group_members gm "
+        "JOIN groups g ON gm.group_id = g.id "
+        "WHERE g.name = ?";
+
+    sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, 0);
+    sqlite3_bind_text(stmt, 1, groupname.c_str(), -1, SQLITE_STATIC);
+
+    std::string list_members = "GROUP_MEMBERS:" + groupname + ":";
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        const char* member = (const char*)sqlite3_column_text(stmt, 0);
+        list_members += std::string(member) + ",";
+    }
+    sqlite3_finalize(stmt);
+
+    // Удаление последней запятой, если есть участники
+    if (list_members.back() == ',') {
+        list_members.pop_back();
+    }
+    return list_members;
+}
+
+// Обработчик команды создания группового чата
 void create_group(SOCKET client_socket, const std::string& username, const std::string& command) {
     if (command.starts_with("CREATE_GROUP:")) {
         size_t name_end = command.find(':', 13);
@@ -383,6 +408,8 @@ void handle_client(SOCKET client_socket) {
         if (sqlite3_step(stmt) == SQLITE_ROW && verify_password(pass, (const char*)sqlite3_column_text(stmt, 0))) {
             username = user;
             send(client_socket, "OK: Authentification successfully", 2, 0);
+            std::string contacts_list = list_contacts(username);
+            send(client_socket, contacts_list.c_str(), contacts_list.size(), 0);
         }
         else {
             send(client_socket, "FAIL:Invalid credentials", 24, 0);
@@ -444,12 +471,28 @@ void handle_client(SOCKET client_socket) {
             // Пересылка сообщения получателю(ям)
             std::lock_guard<std::mutex> lock(clients_mutex);
             if (is_group) {
-                // Групповое сообщение
-                for (const auto& client : clients) {
-                    if (client.username != username) { // Не отправляем себе
-                        send(client.socket, command.c_str(), command.size(), 0);
+                //// Групповое сообщение
+                // Получение списка участников группы
+                sqlite3_stmt* members_stmt;
+                sqlite3_prepare_v2(db,
+                    "SELECT username FROM group_members gm "
+                    "JOIN groups g ON gm.group_id = g.id "
+                    "WHERE g.name = ?", -1, &members_stmt, 0);
+                sqlite3_bind_text(members_stmt, 1, recipient.c_str(), -1, SQLITE_STATIC);
+
+                // Отправка сообщения всем участникам группы, кроме отправителя
+                while (sqlite3_step(members_stmt) == SQLITE_ROW) {
+                    std::string member = (const char*)sqlite3_column_text(members_stmt, 0);
+                    if (member != username) {
+                        for (const auto& client : clients) {
+                            if (client.username == member) {
+                                send(client.socket, command.c_str(), command.size(), 0);
+                                break;
+                            }
+                        }
                     }
                 }
+                sqlite3_finalize(members_stmt);
             }
             else {
                 // Личное сообщение
@@ -487,8 +530,87 @@ void handle_client(SOCKET client_socket) {
             std::string history = history_messages(username, recipient);
             send(client_socket, history.c_str(), history.size(), 0);
         }
+        else if (command.starts_with("GET_GROUP_MEMBERS:")) {
+            // Формат: GET_GROUP_MEMBERS:groupname
+            std::string groupname = command.substr(18);
+            std::string members = list_members(groupname);
+            send(client_socket, members.c_str(), members.size(), 0);
+        }
         else if (command.starts_with("CREATE_GROUP:")) {
             create_group(client_socket, username, command);
+        }
+        else if (command.starts_with("INVITE_TO_GROUP:")) {
+            // Формат: INVITE_TO_GROUP:groupname:username
+            size_t group_end = command.find(':', 16);
+            std::string group_name = command.substr(16, group_end - 16);
+            std::string invite_username = command.substr(group_end + 1);
+
+            // Проверка, существует ли группа и является ли приглашающий её участником
+            sqlite3_stmt* stmt;
+            sqlite3_prepare_v2(db,
+                "SELECT 1 FROM group_members gm "
+                "JOIN groups g ON gm.group_id = g.id "
+                "WHERE g.name = ? AND gm.username = ?", -1, &stmt, 0);
+            sqlite3_bind_text(stmt, 1, group_name.c_str(), -1, SQLITE_STATIC);
+            sqlite3_bind_text(stmt, 2, username.c_str(), -1, SQLITE_STATIC);
+
+            if (sqlite3_step(stmt) == SQLITE_ROW) {
+                // Проверка, не является ли пользователь уже участником
+                sqlite3_finalize(stmt);
+                sqlite3_prepare_v2(db,
+                    "SELECT 1 FROM group_members gm "
+                    "JOIN groups g ON gm.group_id = g.id "
+                    "WHERE g.name = ? AND gm.username = ?", -1, &stmt, 0);
+                sqlite3_bind_text(stmt, 1, group_name.c_str(), -1, SQLITE_STATIC);
+                sqlite3_bind_text(stmt, 2, invite_username.c_str(), -1, SQLITE_STATIC);
+
+                if (sqlite3_step(stmt) != SQLITE_ROW) {
+                    // Добавление пользователя в группу
+                    sqlite3_finalize(stmt);
+                    sqlite3_prepare_v2(db,
+                        "INSERT INTO group_members (group_id, username) "
+                        "SELECT g.id, ? FROM groups g WHERE g.name = ?", -1, &stmt, 0);
+                    sqlite3_bind_text(stmt, 1, invite_username.c_str(), -1, SQLITE_STATIC);
+                    sqlite3_bind_text(stmt, 2, group_name.c_str(), -1, SQLITE_STATIC);
+
+                    if (sqlite3_step(stmt) == SQLITE_DONE) {
+                        std::string notify_msg = "GROUP_MEMBER_ADDED:" + group_name + ":" + invite_username;
+                        send(client_socket, notify_msg.c_str(), notify_msg.size(), 0);
+                    }
+                    else {
+                        send(client_socket, "INVITE_RESULT:FAIL:Database error", 32, 0);
+                    }
+                }
+                else {
+                    send(client_socket, "INVITE_RESULT:FAIL:User already in group", 37, 0);
+                }
+            }
+            else {
+                send(client_socket, "INVITE_RESULT:FAIL:Not a group member or group doesn't exist", 55, 0);
+            }
+            sqlite3_finalize(stmt);
+            }
+        else if (command.starts_with("LEAVE_GROUP:")) {
+            // Формат: LEAVE_GROUP:groupname
+            std::string group_name = command.substr(12);
+
+            // Удаление пользователя из группы
+            sqlite3_stmt* stmt;
+            sqlite3_prepare_v2(db,
+                "DELETE FROM group_members WHERE username = ? AND group_id IN "
+                "(SELECT id FROM groups WHERE name = ?)", -1, &stmt, 0);
+            sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+            sqlite3_bind_text(stmt, 2, group_name.c_str(), -1, SQLITE_STATIC);
+
+            if (sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(db) > 0) {
+                // Уведомляем всех участников группы
+                std::string notify_msg = "GROUP_MEMBER_LEFT:" + group_name + ":" + username;
+                send(client_socket, notify_msg.c_str(), notify_msg.size(), 0);
+            }
+            else {
+                send(client_socket, "LEAVE_FAILED:Not a group member or group doesn't exist", 52, 0);
+            }
+            sqlite3_finalize(stmt);
         }
     }
 
