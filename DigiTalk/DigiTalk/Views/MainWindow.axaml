@@ -34,13 +34,12 @@
 			<!-- Список контактов -->
 			<StackPanel Grid.Column="0" Background="#f5f5f5">
 				<StackPanel Orientation="Horizontal">
-					<Button Content="Log in" Margin="5" Command="{Binding LoginCommand}"
-						    CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}"/>
-					<Button Content="Refresh" Command="{Binding RefreshContactsCommand}"/>
-				</StackPanel>
-				<!-- Кнопки для управления группами -->
-				<StackPanel Orientation="Horizontal" Margin="5">
-					<Button Content="Group" Command="{Binding CreateGroupCommand}" />
+					<Button Content="Log In" Margin="5" Command="{Binding LoginCommand}"
+						    CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}"
+							IsEnabled="{Binding !IsAuthenticated}"/>
+					<Button Content="Log Out" Command="{Binding Disconnect}" IsEnabled="{Binding IsAuthenticated}"/>
+					<Button Content="Group" Command="{Binding CreateGroupCommand}" IsEnabled="{Binding IsAuthenticated}"/>
+					<Button Content="Refresh" Command="{Binding RefreshContactsCommand}" IsEnabled="{Binding IsAuthenticated}"/>
 				</StackPanel>
 				<ScrollViewer VerticalScrollBarVisibility="Visible" Height="350">
 					<ListBox ItemsSource="{Binding Contacts}" SelectedItem="{Binding SelectedContact}">
