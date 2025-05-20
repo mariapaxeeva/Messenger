@@ -7,13 +7,14 @@
 		Icon="/Assets/icons/logo.ico"
 		mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
         x:Class="DigiTalk.Views.MainWindow"
-        x:DataType="vm:MainViewModel"
 		Title="DigiTalk"
+		x:Name="_MainWindow"
         MinWidth="600" MinHeight="450">
 	<Window.Resources>
 		<conv:MessageBackgroundConverter x:Key="MessageBackgroundConverter"/>
 		<conv:MessageAlignmentConverter x:Key="MessageAlignmentConverter"/>
 		<conv:SenderColorConverter x:Key="SenderColorConverter"/>
+
 	</Window.Resources>
 	<Grid RowDefinitions="Auto,*,Auto">
 		<!-- Заголовок -->
@@ -38,16 +39,23 @@
 				</StackPanel>
 				<!-- Кнопки для управления группами -->
 				<StackPanel Orientation="Horizontal" Margin="5">
-					<Button Content="Group" Command="{Binding CreateGroupCommand}"
-							 CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}" />
-					<Button Content="Join" Command="{Binding JoinGroupCommand}"/>
-					<Button Content="Leave" Command="{Binding LeaveGroupCommand}"/>
+					<Button Content="Group" Command="{Binding CreateGroupCommand}" />
 				</StackPanel>
 				<ScrollViewer VerticalScrollBarVisibility="Visible" Height="450">
 					<ListBox ItemsSource="{Binding Contacts}" SelectedItem="{Binding SelectedContact}">
 						<ListBox.ItemTemplate>
 							<DataTemplate>
 								<StackPanel Orientation="Horizontal">
+									<StackPanel.ContextMenu>
+										<ContextMenu>
+											<MenuItem Header="Invite member"
+													  Command="{Binding #_MainWindow.DataContext.InviteToGroupCommand}"
+													  IsVisible="{Binding IsGroup}"/>
+											<MenuItem Header="Leave group"
+													  Command="{Binding #_MainWindow.DataContext.LeaveGroupCommand}"
+													  IsVisible="{Binding IsGroup}"/>
+										</ContextMenu>
+									</StackPanel.ContextMenu>
 									<Ellipse Width="10" Height="10" Fill="#a37ddb"
 											 VerticalAlignment="Center" Margin="0,0,5,0"/>
 									<TextBlock Text="{Binding Name}" />

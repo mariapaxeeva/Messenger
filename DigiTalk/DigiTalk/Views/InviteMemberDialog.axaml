@@ -1,0 +1,44 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:DigiTalk.ViewModels"
+        xmlns:conv="using:DigiTalk.Converters"
+        mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="300"
+        x:Class="DigiTalk.Views.InviteMemberDialog"
+        x:DataType="vm:InviteMemberViewModel"
+        Title="Invite Member"
+        Width="300" Height="400">
+	<Window.Styles>
+		<Style Selector="TextBlock">
+			<Setter Property="FontSize" Value="14"/>
+		</Style>
+	</Window.Styles>
+
+	<Grid RowDefinitions="Auto,Auto,*,Auto" Margin="10">
+		<!-- Заголовок -->
+		<TextBlock Text="Invite to Group" FontSize="18" FontWeight="Bold"
+                   Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+
+		<!-- Поиск -->
+		<TextBox Watermark="Search contacts..." Text="{Binding SearchText}"
+                 Grid.Row="1" Margin="0,0,0,10"/>
+
+		<!-- Список контактов -->
+		<ListBox ItemsSource="{Binding FilteredContacts}" SelectedItem="{Binding SelectedContact}"
+                 Grid.Row="2" Margin="0,0,0,10">
+			<ListBox.ItemTemplate>
+				<DataTemplate>
+					<TextBlock Text="{Binding Name}"/>
+				</DataTemplate>
+			</ListBox.ItemTemplate>
+		</ListBox>
+
+		<!-- Кнопки -->
+		<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Grid.Row="3" Spacing="10">
+			<Button Content="Cancel" Click="CancelButton_Click" Width="80"/>
+			<Button Content="Invite" Click="InviteButton_Click" Width="80"
+                    IsEnabled="{Binding SelectedContact, Converter={x:Static conv:ObjectIsNotNullConverter.Instance}}"/>
+		</StackPanel>
+	</Grid>
+</Window>

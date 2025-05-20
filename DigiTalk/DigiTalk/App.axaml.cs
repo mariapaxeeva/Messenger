@@ -17,10 +17,9 @@ namespace DigiTalk
         {
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
-                desktop.MainWindow = new MainWindow
-                {
-                    DataContext = new MainViewModel()
-                };
+                var mainWindow = new MainWindow();
+                desktop.MainWindow = mainWindow;
+                mainWindow.DataContext = new MainViewModel(mainWindow);
             }
 
             base.OnFrameworkInitializationCompleted();

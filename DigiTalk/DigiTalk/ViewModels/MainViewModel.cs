@@ -12,6 +12,7 @@ using DigiTalk.Models;
 using DigiTalk.Views;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Reactive.Linq;
 
 namespace DigiTalk.ViewModels
 {
@@ -55,22 +56,25 @@ namespace DigiTalk.ViewModels
 
         public ObservableCollection<Contact> Contacts { get; } = new();
         public ObservableCollection<Message> Messages { get; } = new();
-
+        public ObservableCollection<Contact> GroupMembers { get; } = new();
         public ReactiveCommand<Unit, Unit> SendMessageCommand { get; }
         public ReactiveCommand<Unit, Unit> RefreshContactsCommand { get; }
         public ReactiveCommand<Window, Unit> LoginCommand { get; }
-        public ReactiveCommand<Window, Unit> CreateGroupCommand { get; }
-        public ReactiveCommand<Unit, Unit> JoinGroupCommand { get; }
-        public ReactiveCommand<Unit, Unit> LeaveGroupCommand { get; }
+        public ReactiveCommand<Unit, Unit> CreateGroupCommand { get; }
         public ReactiveCommand<Unit, Unit> InviteToGroupCommand { get; }
+        public ReactiveCommand<Unit, Unit> LeaveGroupCommand { get; }
 
-        public MainViewModel()
+        public MainViewModel(Window mainWindow)
         {
+            _mainWindow = mainWindow;
+
+            // Инициализация команд
             SendMessageCommand = ReactiveCommand.Create(SendMessage);
             RefreshContactsCommand = ReactiveCommand.Create(RefreshContacts);
             LoginCommand = ReactiveCommand.CreateFromTask<Window>(LoginAsync);
-            CreateGroupCommand = ReactiveCommand.CreateFromTask<Window>(CreateGroupAsync);
-            LeaveGroupCommand = ReactiveCommand.Create(LeaveGroup);
+            CreateGroupCommand = ReactiveCommand.CreateFromTask(CreateGroupAsync);
+            InviteToGroupCommand = ReactiveCommand.CreateFromTask(InviteToGroupAsync);
+            LeaveGroupCommand = ReactiveCommand.CreateFromTask(LeaveGroupAsync);
         }
 
         private async Task LoginAsync(Window window)
@@ -123,8 +127,6 @@ namespace DigiTalk.ViewModels
 
                 _receiveThread = new Thread(ReceiveMessages);
                 _receiveThread.Start();
-
-                RefreshContacts();
             }
             catch (Exception ex)
             {
@@ -140,7 +142,7 @@ namespace DigiTalk.ViewModels
             try
             {
                 var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                var fullMessage = $"MSG:{SelectedContact.Name}:{timestamp}:{MessageText}";
+                var fullMessage = $"MSG:{(SelectedContact.IsGroup ? "#" : "")}{SelectedContact.Name}:{timestamp}:{MessageText}";
                 SendMessageToStream(fullMessage);
 
                 Messages.Add(new Message
@@ -161,7 +163,12 @@ namespace DigiTalk.ViewModels
 
         private void RefreshContacts()
         {
-            SendMessageToStream("GET_CONTACTS");
+            SendMessageToStream($"GET_CONTACTS");
+        }
+
+        private void GetGroupMembers()
+        {
+            SendMessageToStream($"GET_GROUP_MEMBERS:{SelectedContact.Name}");
         }
 
         private void SendMessageToStream(string message)
@@ -199,16 +206,38 @@ namespace DigiTalk.ViewModels
                         {
                             ProcessIncomingMessage(message);
                         }
-                        else if (message.StartsWith("GROUP_MSG:"))
-                        {
-                            ProcessGroupMessages(message);
-                        }
                         else if (message.StartsWith("GROUP_CREATED:"))
                         {
                             // Формат: GROUP_CREATED:groupname
                             var groupName = message.Substring(14);
                             Contacts.Add(new Contact { Name = groupName, IsGroup = true });
                             StatusMessage = $"Group successfully created: {groupName}";
+                        }
+                        else if (message.StartsWith("GROUP_MEMBER_ADDED:"))
+                        {
+                            // Формат: GROUP_MEMBER_ADDED:groupname:username
+                            var parts = message.Substring(18).Split(':');
+                            if (parts.Length == 2)
+                            {
+                                var groupName = parts[0];
+                                var username = parts[1];
+                                StatusMessage = $"{username} joined group {groupName}";
+                            }
+                        }
+                        else if (message.StartsWith("GROUP_MEMBER_LEFT:"))
+                        {
+                            // Формат: GROUP_MEMBER_LEFT:groupname:username
+                            var parts = message.Substring(17).Split(':');
+                            if (parts.Length == 2)
+                            {
+                                var groupName = parts[0];
+                                var username = parts[1];
+                                StatusMessage = $"{username} left group {groupName}";
+                            }
+                        }
+                        else if (message.StartsWith("GROUP_MEMBERS:"))
+                        {
+                            ProcessMembersList(message);
                         }
                     });
                 }
@@ -227,9 +256,10 @@ namespace DigiTalk.ViewModels
         {
             Contacts.Clear();
 
+            // Формат: CONTACTS:username1,username2...|GROUPS:groupname1,groupname2...
             var parts = message.Split('|');
             var users = parts[0].Substring(9).Split(',', StringSplitOptions.RemoveEmptyEntries);
-            var groups = parts[1].Substring(8).Split(',', StringSplitOptions.RemoveEmptyEntries);
+            var groups = parts[1].Substring(7).Split(',', StringSplitOptions.RemoveEmptyEntries);
 
             foreach (var user in users)
                 Contacts.Add(new Contact { Name = user, IsGroup = false });
@@ -238,13 +268,25 @@ namespace DigiTalk.ViewModels
                 Contacts.Add(new Contact { Name = group, IsGroup = true });
         }
 
+        private void ProcessMembersList(string message)
+        {
+            GroupMembers.Clear();
+
+            // Формат: GROUP_MEMBERS:groupname:member1,member2,member3
+            var parts = message.Substring(14).Split(':');
+            var groupName = parts[0];
+            var members = parts[1].Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+            foreach (var member in members)
+                GroupMembers.Add(new Contact { Name = member, IsGroup = false });
+        }
+
         private void LoadMessageHistory()
         {
             if (SelectedContact == null) return;
 
             try
             {
-                var request = $"GET_HISTORY:{SelectedContact.Name}";
+                var request = $"GET_HISTORY:{(SelectedContact.IsGroup ? "#" : "")}{SelectedContact.Name}";
                 SendMessageToStream(request);
             }
             catch (Exception ex)
@@ -274,28 +316,7 @@ namespace DigiTalk.ViewModels
             }
         }
 
-        private void ProcessGroupMessages(string message)
-        {
-            var parts = message.Substring(10).Split(':');
-            if (parts.Length >= 3)
-            {
-                var groupName = parts[0];
-                var sender = parts[1];
-                var content = string.Join(":", parts.Skip(2));
-
-                Messages.Add(new Message
-                {
-                    Sender = sender,
-                    Recipient = groupName,
-                    Content = content,
-                    Timestamp = DateTime.Now,
-                    IsGroupMessage = true,
-                    IsOwnMessage = sender == _username
-                });
-            }
-        }
-
-        private async Task CreateGroupAsync(Window window)
+        private async Task CreateGroupAsync()
         {
             // Фильтр контактов (исключает текущего пользователя и группы)
             var filteredContacts = Contacts
@@ -306,8 +327,7 @@ namespace DigiTalk.ViewModels
             {
                 DataContext = new GroupDialogViewModel(filteredContacts)
             };
-
-            var result = await dialog.ShowDialog<GroupCreationResult>(window); 
+            var result = await dialog.ShowDialog<GroupCreationResult>(_mainWindow); 
             if (result?.Result == true)
             {
                 // Формирование команды для сервера: CREATE_GROUP:groupname:member1,member2,member3
@@ -342,6 +362,51 @@ namespace DigiTalk.ViewModels
                     IsGroupMessage = isGroup
                 });
             }
+        }
+
+        private async Task InviteToGroupAsync()
+        {
+            if (SelectedContact?.IsGroup != true) return;
+
+            // Создание наблюдаемой последовательности для ожидания обновления GroupMembers
+            var membersUpdated = this.WhenAnyValue(x => x.GroupMembers.Count)
+                                    .Skip(1)
+                                    .FirstAsync()
+                                    .Timeout(TimeSpan.FromSeconds(5))
+                                    .Catch(Observable.Return(0));
+
+            // Запрос участников группы у сервера
+            GetGroupMembers();
+
+            try
+            {
+                // Ожидание обновления GroupMembers
+                await membersUpdated;
+
+                var dialog = new InviteMemberDialog()
+                {
+                    DataContext = new InviteMemberViewModel(Contacts.ToList(), GroupMembers.ToList())
+                };
+                var result = await dialog.ShowDialog<InviteMemberResult>(_mainWindow);
+                if (result?.Result == true)
+                {
+                    var command = $"INVITE_TO_GROUP:{SelectedContact.Name}:{result.Username}";
+                    SendMessageToStream(command);
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Error: {ex.Message}";
+            }
+        }
+
+        private async Task LeaveGroupAsync()
+        {
+            if (SelectedContact?.IsGroup != true) return;
+
+            SendMessageToStream($"LEAVE_GROUP:{SelectedContact.Name}");
+            Contacts.Remove(SelectedContact);
+            SelectedContact = null;
         }
 
         public void Disconnect()
