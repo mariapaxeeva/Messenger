@@ -3,6 +3,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:conv="clr-namespace:DigiTalk.Converters"
+		xmlns:behaviors="clr-namespace:DigiTalk.Behaviors"
 		xmlns:vm="using:DigiTalk.ViewModels"
 		Icon="/Assets/icons/logo.ico"
 		mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
@@ -41,7 +42,7 @@
 				<StackPanel Orientation="Horizontal" Margin="5">
 					<Button Content="Group" Command="{Binding CreateGroupCommand}" />
 				</StackPanel>
-				<ScrollViewer VerticalScrollBarVisibility="Visible" Height="450">
+				<ScrollViewer VerticalScrollBarVisibility="Visible" Height="350">
 					<ListBox ItemsSource="{Binding Contacts}" SelectedItem="{Binding SelectedContact}">
 						<ListBox.ItemTemplate>
 							<DataTemplate>
@@ -78,7 +79,8 @@
 						   Opacity="0.5"/>
 				
 				<!-- Сообщения -->
-				<ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+				<ScrollViewer behaviors:ScrollViewerBehavior.AutoScroll="True"
+              x:Name="MessagesScrollViewer" Grid.Row="0" VerticalScrollBarVisibility="Auto">
 					<ItemsControl ItemsSource="{Binding Messages}">
 						<ItemsControl.ItemTemplate>
 							<DataTemplate>

@@ -210,7 +210,6 @@ namespace DigiTalk.ViewModels
                         {
                             // Формат: GROUP_CREATED:groupname
                             var groupName = message.Substring(14);
-                            Contacts.Add(new Contact { Name = groupName, IsGroup = true });
                             StatusMessage = $"Group successfully created: {groupName}";
                         }
                         else if (message.StartsWith("GROUP_MEMBER_ADDED:"))

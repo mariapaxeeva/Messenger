@@ -38,9 +38,6 @@ namespace DigiTalk.ViewModels
                 .Where(c => !c.IsGroup && !_groupMembers.Contains(c.Name))
                 .ToList();
             FilteredContacts = AvailableContacts;
-            //var canInvite = this.WhenAnyValue(
-            //    x => x.SelectedContact,
-            //    (Contact contact) => contact != null);
         }
 
         private void FilterContacts()
