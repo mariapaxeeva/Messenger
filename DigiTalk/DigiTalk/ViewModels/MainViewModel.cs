@@ -73,7 +73,6 @@ namespace DigiTalk.ViewModels
         public ObservableCollection<Message> Messages { get; } = new();
         public ObservableCollection<Contact> GroupMembers { get; } = new();
         public ReactiveCommand<Unit, Unit> SendMessageCommand { get; }
-        public ReactiveCommand<Unit, Unit> RefreshContactsCommand { get; }
         public ReactiveCommand<Window, Unit> LoginCommand { get; }
         public ReactiveCommand<Unit, Unit> CreateGroupCommand { get; }
         public ReactiveCommand<Unit, Unit> InviteToGroupCommand { get; }
@@ -88,7 +87,6 @@ namespace DigiTalk.ViewModels
 
             // Инициализация команд
             SendMessageCommand = ReactiveCommand.Create(SendMessage);
-            RefreshContactsCommand = ReactiveCommand.Create(RefreshContacts);
             LoginCommand = ReactiveCommand.CreateFromTask<Window>(LoginAsync);
             CreateGroupCommand = ReactiveCommand.CreateFromTask(CreateGroupAsync);
             InviteToGroupCommand = ReactiveCommand.CreateFromTask(InviteToGroupAsync);

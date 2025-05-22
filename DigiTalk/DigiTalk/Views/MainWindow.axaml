@@ -38,7 +38,6 @@
 							IsEnabled="{Binding !IsAuthenticated}"/>
 					<Button Content="Log Out" Command="{Binding Disconnect}" IsEnabled="{Binding IsAuthenticated}"/>
 					<Button Content="Group" Command="{Binding CreateGroupCommand}" IsEnabled="{Binding IsAuthenticated}"/>
-					<Button Content="Refresh" Command="{Binding RefreshContactsCommand}" IsEnabled="{Binding IsAuthenticated}"/>
 				</StackPanel>
 				<ScrollViewer VerticalScrollBarVisibility="Visible" Height="350">
 					<ListBox ItemsSource="{Binding Contacts}" SelectedItem="{Binding SelectedContact}">
@@ -78,7 +77,7 @@
 				
 				<!-- Сообщения -->
 				<ScrollViewer behaviors:ScrollViewerBehavior.AutoScroll="True"
-              x:Name="MessagesScrollViewer" Grid.Row="0" VerticalScrollBarVisibility="Auto">
+					x:Name="MessagesScrollViewer" Grid.Row="0" VerticalScrollBarVisibility="Auto">
 					<ItemsControl ItemsSource="{Binding Messages}">
 						<ItemsControl.ItemTemplate>
 							<DataTemplate>

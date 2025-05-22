@@ -391,8 +391,6 @@ void handle_client(SOCKET client_socket) {
         if (sqlite3_step(stmt) == SQLITE_DONE) {
             username = user;
             send(client_socket, "OK:Registered successfully", 25, 0);
-            std::string contacts_list = list_contacts(username);
-            send(client_socket, contacts_list.c_str(), contacts_list.size(), 0);
         }
         else {
             send(client_socket, "FAIL:Registration failed", 23, 0);
@@ -409,8 +407,6 @@ void handle_client(SOCKET client_socket) {
         if (sqlite3_step(stmt) == SQLITE_ROW && verify_password(pass, (const char*)sqlite3_column_text(stmt, 0))) {
             username = user;
             send(client_socket, "OK: Authentification successfully", 2, 0);
-            std::string contacts_list = list_contacts(username);
-            send(client_socket, contacts_list.c_str(), contacts_list.size(), 0);
         }
         else {
             send(client_socket, "FAIL:Invalid credentials", 24, 0);
@@ -421,18 +417,24 @@ void handle_client(SOCKET client_socket) {
     }
     sqlite3_finalize(stmt);
 
-    // Получение публичного ключа от клиента
-    len = recv(client_socket, buffer, BUFFER_SIZE, 0);
-    if (len <= 0) {
-        closesocket(client_socket);
-        return;
-    }
-    public_key = load_public_key(std::string(buffer, len));
+    //// Получение публичного ключа от клиента
+    //len = recv(client_socket, buffer, BUFFER_SIZE, 0);
+    //if (len <= 0) {
+    //    closesocket(client_socket);
+    //    return;
+    //}
+    //public_key = load_public_key(std::string(buffer, len));
 
     // Добавление клиента в список подключенных
     {
         std::lock_guard<std::mutex> lock(clients_mutex);
         clients.push_back({ client_socket, username});
+    }
+
+    // Обновление списка контактов для всех подключенных клиентов
+    for (const auto& client : clients) {
+        std::string contacts_list = list_contacts(client.username);
+        send(client.socket, contacts_list.c_str(), contacts_list.size(), 0);
     }
 
     // Основной цикл обработки команд от клиента
