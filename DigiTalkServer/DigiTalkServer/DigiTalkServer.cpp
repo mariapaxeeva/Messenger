@@ -57,7 +57,10 @@ void init_db() {
             "name TEXT UNIQUE NOT NULL, creator TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);"
         "CREATE TABLE IF NOT EXISTS group_members(group_id INTEGER NOT NULL, "
             "username TEXT NOT NULL, joined_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(group_id, username), "
-            "FOREIGN KEY(group_id) REFERENCES groups(id), FOREIGN KEY(username) REFERENCES users(username));";
+            "FOREIGN KEY(group_id) REFERENCES groups(id), FOREIGN KEY(username) REFERENCES users(username));"
+        "CREATE TABLE IF NOT EXISTS deleted_messages(message_id INTEGER NOT NULL, username TEXT NOT NULL, "
+            "PRIMARY KEY(message_id, username), FOREIGN KEY(message_id) REFERENCES messages(id), "
+            "FOREIGN KEY(username) REFERENCES users(username));";
     sqlite3_exec(db, sql, 0, 0, 0);
 }
 
@@ -188,49 +191,45 @@ std::string list_contacts(const std::string& username) {
 std::string history_messages(const std::string& username, const std::string& recipient) {
     sqlite3_stmt* stmt;
     std::string query;
-    std::string group_name;
 
-    // Проверка, является ли получатель группой (начинается с #)
-    bool is_group = (recipient[0] == '#');
+    // Для групп: извлечение из БД всех сообщений, адресованных этой группе
+    // Для личных сообщений: получение из БД переписки между двумя пользователями
+    query =
+        "SELECT m.id, m.sender, "
+        "CASE WHEN m.deleted = 1 THEN '[Сообщение удалено]' ELSE m.content END as content, "
+        "strftime('%s', m.timestamp), m.is_group "
+        "FROM messages m "
+        "LEFT JOIN deleted_messages dm ON m.id = dm.message_id AND dm.username = ?1 "
+        "WHERE "
+        "("
+        "   (m.is_group = 0 AND ((m.sender = ?1 AND m.recipient = ?2) OR (m.sender = ?2 AND m.recipient = ?1))) "
+        "   OR "
+        "   (m.is_group = 1 AND m.recipient = ?2)"
+        ") "
+        "AND m.deleted = 0 AND dm.username IS NULL "
+        "ORDER BY m.timestamp ASC";
 
-    if (is_group) {
-        // Для групп: извлечение из БД всех сообщений, адресованных этой группе
-        group_name = recipient.substr(1); // Удаление префикса #
-        query = "SELECT id, sender, content, strftime('%s', timestamp) FROM messages "
-            "WHERE deleted = 0 AND recipient = ? AND is_group = 1 "
-            "ORDER BY timestamp ASC";
+    sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, 0);
+    sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, recipient.c_str(), -1, SQLITE_STATIC);
 
-        sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, 0);
-        int bind_result = sqlite3_bind_text(stmt, 1, group_name.c_str(), -1, SQLITE_STATIC);
-        if (bind_result != SQLITE_OK) {
-            std::cerr << "Bind failed: " << sqlite3_errmsg(db) << std::endl;
-        }
-    }
-    else {
-        // Для личных сообщений: получение из БД переписки между двумя пользователями
-        query = "SELECT id, sender, content, strftime('%s', timestamp) FROM messages WHERE deleted = 0 AND "
-            "((sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?)) "
-            "ORDER BY timestamp ASC";
-
-        sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, 0);
-        sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
-        sqlite3_bind_text(stmt, 2, recipient.c_str(), -1, SQLITE_STATIC);
-        sqlite3_bind_text(stmt, 3, recipient.c_str(), -1, SQLITE_STATIC);
-        sqlite3_bind_text(stmt, 4, username.c_str(), -1, SQLITE_STATIC);
-    }
-
+    // Формирование истории для отправки клиенту
     std::string history = "HISTORY:";
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         int id = sqlite3_column_int(stmt, 0);
         const char* sender = (const char*)sqlite3_column_text(stmt, 1);
         const char* content = (const char*)sqlite3_column_text(stmt, 2);
         time_t timestamp = sqlite3_column_int64(stmt, 3);
+        int is_group = sqlite3_column_int(stmt, 4);
 
-        history += std::to_string(id) + ":" + sender + ":" + std::to_string(timestamp) + ":" + content + "|";
+        history += std::to_string(id) + ":" + sender + ":" + std::to_string(timestamp) + ":" + std::to_string(is_group) + ":" + content + "|";
     }
     sqlite3_finalize(stmt);
 
-    if (history.back() == '|') history.pop_back(); // Удаление последнего разделителя
+    // Удаление последнего разделителя
+    if (!history.empty() && history.back() == '|') {
+        history.pop_back();
+    }
 
     return history;
 }
@@ -257,7 +256,7 @@ EVP_PKEY* get_user_key(const std::string& username) {
     return nullptr;
 }
 
-// Обработчик команды создания группового чата
+// Извлечение из БД списка участников группового чата
 std::string list_members(const std::string& groupname) {
     sqlite3_stmt* stmt;
     std::string query =
@@ -327,7 +326,7 @@ void create_group(SOCKET client_socket, const std::string& username, const std::
                 sqlite3_finalize(stmt);
 
                 // Уведомление участника
-                notify_user(member, "GROUP_JOINED:" + group_name + ":" + username);
+                notify_user(member, "GROUP_MEMBER_ADDED:" + group_name + ":" + username);
             }
 
             // Уведомление создателя
@@ -392,6 +391,8 @@ void handle_client(SOCKET client_socket) {
         if (sqlite3_step(stmt) == SQLITE_DONE) {
             username = user;
             send(client_socket, "OK:Registered successfully", 25, 0);
+            std::string contacts_list = list_contacts(username);
+            send(client_socket, contacts_list.c_str(), contacts_list.size(), 0);
         }
         else {
             send(client_socket, "FAIL:Registration failed", 23, 0);
@@ -505,19 +506,31 @@ void handle_client(SOCKET client_socket) {
             }
         }
         else if (command.starts_with("DEL:")) {
-            // Удаление сообщения
-            int msg_id = std::stoi(command.substr(4));
+            // Формат: DEL:message_id:for_everyone (for_everyone == 1 - для всех, 0 - только для себя)
+            size_t sep = command.find(':', 4);
+            int msg_id = std::stoi(command.substr(4, sep - 4));
+            bool for_everyone = (command.substr(sep + 1) == "1");
+
+            // Обновление сообщения в БД
             sqlite3_stmt* stmt;
-            sqlite3_prepare_v2(db, "UPDATE messages SET deleted = 1 WHERE id = ?", -1, &stmt, 0);
-            sqlite3_bind_int(stmt, 1, msg_id);
+            if (for_everyone) {
+                // Удаление для всех
+                sqlite3_prepare_v2(db,
+                    "UPDATE messages SET deleted = 1, content = '[Сообщение удалено]' WHERE id = ?",
+                    -1, &stmt, 0);
+                sqlite3_bind_int(stmt, 1, msg_id);
+            }
+            else {
+                // Удаление только для отправителя
+                // Сохранение в отдельной таблице БД идентификатора удаленного сообщения и его отправителя
+                sqlite3_prepare_v2(db,
+                    "INSERT INTO deleted_messages (message_id, username) VALUES (?, ?)",
+                    -1, &stmt, 0);
+                sqlite3_bind_int(stmt, 1, msg_id);
+                sqlite3_bind_text(stmt, 2, username.c_str(), -1, SQLITE_STATIC);
+            }
             sqlite3_step(stmt);
             sqlite3_finalize(stmt);
-
-            // Уведомление всех клиентов об удалении
-            std::lock_guard<std::mutex> lock(clients_mutex);
-            for (auto& client : clients) {
-                send_encrypted(client.socket, command, client.public_key);
-            }
         }
         else if (command.starts_with("GET_CONTACTS")) {
             // Формирование списка контактов и его отправка клиенту
@@ -526,6 +539,7 @@ void handle_client(SOCKET client_socket) {
         }
         else if (command.starts_with("GET_HISTORY:")) {
             // Отправка истории сообщений клиенту
+            // Формат: GET_HISTORY:recipient
             std::string recipient = command.substr(12);
             std::string history = history_messages(username, recipient);
             send(client_socket, history.c_str(), history.size(), 0);
