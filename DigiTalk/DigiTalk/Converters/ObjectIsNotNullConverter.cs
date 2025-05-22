@@ -1,5 +1,6 @@
 ﻿// Конвертер для управления доступностью элементов интерфейса
 // Возвращает true, если объект не null, и false в противном случае
+
 using Avalonia.Data.Converters;
 using System;
 using System.Globalization;

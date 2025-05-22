@@ -40,6 +40,13 @@ namespace DigiTalk.ViewModels
             set => this.RaiseAndSetIfChanged(ref _messageText, value);
         }
 
+        private Message _selectedMessage;
+        public Message SelectedMessage
+        {
+            get => _selectedMessage;
+            set => this.RaiseAndSetIfChanged(ref _selectedMessage, value);
+        }
+
         private Contact _selectedContact;
         public Contact SelectedContact
         {
@@ -61,6 +68,7 @@ namespace DigiTalk.ViewModels
             get => _isAuthenticated;
             set => this.RaiseAndSetIfChanged(ref _isAuthenticated, value);
         }
+        private TaskCompletionSource<bool> _messageIdUpdatedTask = new TaskCompletionSource<bool>();
         public ObservableCollection<Contact> Contacts { get; } = new();
         public ObservableCollection<Message> Messages { get; } = new();
         public ObservableCollection<Contact> GroupMembers { get; } = new();
@@ -70,6 +78,8 @@ namespace DigiTalk.ViewModels
         public ReactiveCommand<Unit, Unit> CreateGroupCommand { get; }
         public ReactiveCommand<Unit, Unit> InviteToGroupCommand { get; }
         public ReactiveCommand<Unit, Unit> LeaveGroupCommand { get; }
+        public ReactiveCommand<Message, Unit> DeleteForMeCommand { get; }
+        public ReactiveCommand<Message, Unit> DeleteForEveryoneCommand { get; }
 
         public MainViewModel(Window mainWindow)
         {
@@ -83,6 +93,8 @@ namespace DigiTalk.ViewModels
             CreateGroupCommand = ReactiveCommand.CreateFromTask(CreateGroupAsync);
             InviteToGroupCommand = ReactiveCommand.CreateFromTask(InviteToGroupAsync);
             LeaveGroupCommand = ReactiveCommand.CreateFromTask(LeaveGroupAsync);
+            DeleteForMeCommand = ReactiveCommand.CreateFromTask<Message>(DeleteForMe);
+            DeleteForEveryoneCommand = ReactiveCommand.CreateFromTask<Message>(DeleteForEveryone);
         }
 
         private async Task LoginAsync(Window window)
@@ -302,7 +314,7 @@ namespace DigiTalk.ViewModels
 
             try
             {
-                var request = $"GET_HISTORY:{(SelectedContact.IsGroup ? "#" : "")}{SelectedContact.Name}";
+                var request = $"GET_HISTORY:{SelectedContact.Name}";
                 SendMessageToStream(request);
             }
             catch (Exception ex)
@@ -313,23 +325,30 @@ namespace DigiTalk.ViewModels
 
         private void ProcessHistoryMessages(string message)
         {
+            Messages.Clear();
+
+            // Формат: HISTORY:id0:sender0,timestamp0,is_group0,content0|id1,sender1...
             var historyItems = message.Substring(8).Split('|');
             foreach (var item in historyItems)
             {
                 var parts = item.Split(':');
-                if (parts.Length >= 4)
+                if (parts.Length >= 5)
                 {
                     var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(parts[2])).DateTime;
 
                     Messages.Add(new Message
                     {
+                        Id = int.Parse(parts[0]),
                         Sender = parts[1],
-                        Content = string.Join(":", parts.Skip(3)), // На случай, если в сообщении есть ':'
+                        Content = string.Join(":", parts.Skip(4)), // На случай, если в сообщении есть ':'
                         Timestamp = timestamp,
+                        IsGroupMessage = parts[3] == "1",
                         IsOwnMessage = parts[1] == _username
                     });
                 }
             }
+            // История загружена
+            _messageIdUpdatedTask.TrySetResult(true);
         }
 
         private async Task CreateGroupAsync()
@@ -423,6 +442,56 @@ namespace DigiTalk.ViewModels
             SendMessageToStream($"LEAVE_GROUP:{SelectedContact.Name}");
             Contacts.Remove(SelectedContact);
             SelectedContact = null;
+        }
+
+        private async Task DeleteMessage(Message message)
+        {
+            if (message == null) return;
+
+            try
+            {
+                // Если message.Id == 0, загрузка истории сообщений
+                if (message.Id == 0)
+                {
+                    _messageIdUpdatedTask = new TaskCompletionSource<bool>();
+                    LoadMessageHistory();
+                    await _messageIdUpdatedTask.Task;
+
+                    // Поиск сообщения в обновленной коллекции
+                    var updatedMessage = Messages.FirstOrDefault(m =>
+                        m.Sender == message.Sender &&
+                        m.Content == message.Content &&
+                        m.Timestamp == message.Timestamp);
+
+                    if (updatedMessage == null) return;
+                    message = updatedMessage;
+                }
+
+                // Формирование команды для сервера
+                var command = message.IsDeletedForEveryone ? $"DEL:{message.Id}:1" : $"DEL:{message.Id}:0";
+                SendMessageToStream(command);
+
+                // Локальное удаление
+                Messages.Remove(message);
+
+                // Уведомление UI об изменении
+                this.RaisePropertyChanged(nameof(Messages));
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Delete error: {ex.Message}";
+            }
+        }
+
+        private async Task DeleteForMe(Message message)
+        {
+            message.IsDeletedForEveryone = false;
+            await DeleteMessage(message);
+        }
+        private async Task DeleteForEveryone(Message message)
+        {
+            message.IsDeletedForEveryone = true;
+            await DeleteMessage(message);
         }
 
         public void Disconnect()
