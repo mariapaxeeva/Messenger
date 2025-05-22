@@ -15,7 +15,6 @@
 		<conv:MessageBackgroundConverter x:Key="MessageBackgroundConverter"/>
 		<conv:MessageAlignmentConverter x:Key="MessageAlignmentConverter"/>
 		<conv:SenderColorConverter x:Key="SenderColorConverter"/>
-
 	</Window.Resources>
 	<Grid RowDefinitions="Auto,*,Auto">
 		<!-- Заголовок -->
@@ -86,6 +85,18 @@
 								<Border Margin="5" CornerRadius="5"
                                         Background="{Binding IsOwnMessage, Converter={StaticResource MessageBackgroundConverter}}"
                                         Padding="10" HorizontalAlignment="{Binding IsOwnMessage, Converter={StaticResource MessageAlignmentConverter}}">
+									<Border.ContextMenu>
+										<ContextMenu>
+											<MenuItem Header="Delete for me"
+													  Command="{Binding #_MainWindow.DataContext.DeleteForMeCommand}"
+													  CommandParameter="{Binding}"
+													  IsVisible="{Binding IsOwnMessage}"/>
+											<MenuItem Header="Delete for everyone"
+													  Command="{Binding #_MainWindow.DataContext.DeleteForEveryoneCommand}"
+													  CommandParameter="{Binding}"
+													  IsVisible="{Binding IsOwnMessage}"/>
+										</ContextMenu>
+									</Border.ContextMenu>
 									<StackPanel>
 										<TextBlock Text="{Binding Sender}" FontWeight="Bold"
                                                    Foreground="{Binding IsOwnMessage, Converter={StaticResource SenderColorConverter}}"/>
