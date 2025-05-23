@@ -8,10 +8,15 @@
 		Icon="/Assets/icons/login-logo.ico"
         Title="Login"
         Width="300" Height="250"
-		WindowStartupLocation="CenterOwner">
+		WindowStartupLocation="CenterOwner"
+		Background="#a37ddb">
 	
-	<StackPanel Margin="10" Spacing="10">
-		<TextBlock Text="Welcome to DigiTalk" FontSize="16" HorizontalAlignment="Center"/>
+	<!--Заголовок-->
+	<StackPanel Spacing="10" Margin="10">
+		<TextBlock Text="Welcome to DigiTalk!"
+				   Foreground="#f5f5f5"
+				   FontSize="16"
+				   HorizontalAlignment="Center"/>
 
 		<StackPanel Spacing="5">
 			<TextBlock Text="Username:"/>

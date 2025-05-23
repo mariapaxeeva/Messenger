@@ -1,3 +1,4 @@
+<!--Главное окно мессенджера-->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -24,9 +25,13 @@
 	
 	<Grid RowDefinitions="Auto,*,Auto" Background="#f5f5f5">
 		<!-- Заголовок -->
-		<Border Grid.Row="0" Background="#a37ddb" Padding="10">
-			<TextBlock Text="DigiTalk" FontSize="20" Foreground="White"
-                       HorizontalAlignment="Center"/>
+		<Border Grid.Row="0" Background="#a37ddb" Padding="7">
+			<TextBlock Text="DIGITALK"
+					   FontSize="18"
+					   Foreground="#f5f5f5"
+					   HorizontalAlignment="Center"
+					   FontFamily="Roboto"
+					   FontWeight="Bold"/>
 		</Border>
 
 		<!-- Основное содержимое -->
