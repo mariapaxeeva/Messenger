@@ -43,6 +43,11 @@
 			<Setter Property="Fill" Value="#a37ddb" />
 		</Style>
 
+		<!-- Для MenuItem -->
+		<Style Selector="MenuItem">
+			<Setter Property="Foreground" Value="#a37ddb"/>
+		</Style>
+
 	</Application.Styles>
 	
 </Application>
