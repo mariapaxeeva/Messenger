@@ -2,10 +2,47 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="DigiTalk.App"
              RequestedThemeVariant="Default">
-             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
 
-    <Application.Styles>
-        <FluentTheme />
-    </Application.Styles>
+	<Application.Styles>
+		<FluentTheme />
+
+		<!-- Для Button -->
+		<Style Selector="Button.iconButton">
+			<Setter Property="Background" Value="Transparent"/>
+			<Setter Property="BorderBrush" Value="Transparent"/>
+		</Style>
+		<Style Selector="Button.iconButton:pointerover Image">
+			<Setter Property="Opacity" Value="0.8"/>
+		</Style>
+
+		<!-- Для ListBox -->
+		<Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+			<Setter Property="Background" Value="#e6ccff"/>
+		</Style>
+
+		<!-- Для TextBox -->
+		<Style Selector="TextBox">
+			<Setter Property="BorderBrush" Value="#a37ddb"/>
+		</Style>
+		
+		<Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+			<Setter Property="BorderBrush" Value="#eba7f2"/>
+		</Style>
+
+		<!-- Для CheckBox -->
+		<Style Selector="CheckBox">
+			<Setter Property="BorderBrush" Value="#a37ddb"/>
+		</Style>
+		
+		<Style Selector="CheckBox:checked /template/ Border#NormalRectangle">
+			<Setter Property="BorderBrush" Value="#a37ddb"/>
+			<Setter Property="Background" Value="#e6ccff"/>
+		</Style>
+		
+		<Style Selector="CheckBox:checked /template/ Path#CheckGlyph">
+			<Setter Property="Fill" Value="#a37ddb" />
+		</Style>
+
+	</Application.Styles>
 	
 </Application>
