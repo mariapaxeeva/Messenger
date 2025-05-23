@@ -7,7 +7,8 @@
 		x:Class="DigiTalk.Views.CreateGroupDialog"
 		Icon="/Assets/icons/group-logo.ico"
         Title="Create group"
-        Width="400" Height="500"
+        Width="300" Height="400"
+		Background="#ffe3fe"
 		WindowStartupLocation="CenterOwner">
 	
 	<Grid RowDefinitions="Auto,*,Auto">
@@ -20,12 +21,16 @@
 		<!-- Выбор участников -->
 		<StackPanel Grid.Row="1" Margin="10" Spacing="5">
 			<TextBlock Text="Select members:"/>
-			<ScrollViewer VerticalScrollBarVisibility="Visible" Height="340">
-				<ListBox ItemsSource="{Binding Contacts}" SelectionMode="Multiple">
+			<ScrollViewer VerticalScrollBarVisibility="Visible" Height="250">
+				<ListBox ItemsSource="{Binding Contacts}" SelectionMode="Multiple" Background="#fdf0ff">
 					<ListBox.ItemTemplate>
 						<DataTemplate>
-							<CheckBox Content="{Binding Contact.Name}"
-									  IsChecked="{Binding IsSelected}"/>
+							<CheckBox IsChecked="{Binding IsSelected}">
+								<StackPanel Orientation="Horizontal" Spacing="5">
+									<Image Source="/Assets/icons/user-avatar.png" Width="20" Height="20"/>
+									<TextBlock Text="{Binding Contact.Name}" VerticalAlignment="Center"/>
+								</StackPanel>
+							</CheckBox>
 						</DataTemplate>
 					</ListBox.ItemTemplate>
 				</ListBox>
@@ -34,9 +39,9 @@
 
 		<!-- Кнопки -->
 		<StackPanel Grid.Row="2" Orientation="Horizontal"
-                    HorizontalAlignment="Right" Spacing="5" Margin="10">
-			<Button Content="Cancel" Width="80" Click="CancelButton_Click"/>
-			<Button Content="Create" Width="80" Click="CreateButton_Click"/>
+                    HorizontalAlignment="Right" Spacing="10" Margin="0,0,10,10">
+			<Button Content="Cancel" Width="80" Background="#e5ccff" Click="CancelButton_Click"/>
+			<Button Content="Create" Width="80" Background="#e5ccff" Click="CreateButton_Click"/>
 		</StackPanel>
 	</Grid>
 </Window>
