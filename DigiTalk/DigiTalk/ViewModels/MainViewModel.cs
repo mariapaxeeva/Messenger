@@ -75,6 +75,7 @@ namespace DigiTalk.ViewModels
         public ReactiveCommand<Unit, Unit> SendMessageCommand { get; }
         public ReactiveCommand<Window, Unit> LoginCommand { get; }
         public ReactiveCommand<Unit, Unit> CreateGroupCommand { get; }
+        public ReactiveCommand<Unit, Unit> ShowMembersCommand { get; }
         public ReactiveCommand<Unit, Unit> InviteToGroupCommand { get; }
         public ReactiveCommand<Unit, Unit> LeaveGroupCommand { get; }
         public ReactiveCommand<Message, Unit> DeleteForMeCommand { get; }
@@ -89,6 +90,7 @@ namespace DigiTalk.ViewModels
             SendMessageCommand = ReactiveCommand.Create(SendMessage);
             LoginCommand = ReactiveCommand.CreateFromTask<Window>(LoginAsync);
             CreateGroupCommand = ReactiveCommand.CreateFromTask(CreateGroupAsync);
+            ShowMembersCommand = ReactiveCommand.CreateFromTask(ShowMembersAsync);
             InviteToGroupCommand = ReactiveCommand.CreateFromTask(InviteToGroupAsync);
             LeaveGroupCommand = ReactiveCommand.CreateFromTask(LeaveGroupAsync);
             DeleteForMeCommand = ReactiveCommand.CreateFromTask<Message>(DeleteForMe);
@@ -375,6 +377,10 @@ namespace DigiTalk.ViewModels
                     IsGroup = true
                 });
             }
+            else
+            {
+                StatusMessage = $"Failed to create a group: make sure that the group name is not empty";
+            }
         }
         private void ProcessIncomingMessage(string message)
         {
@@ -394,6 +400,37 @@ namespace DigiTalk.ViewModels
                     IsOwnMessage = false,
                     IsGroupMessage = isGroup
                 });
+            }
+        }
+
+        private async Task ShowMembersAsync()
+        {
+            if (SelectedContact?.IsGroup != true) return;
+
+            // Создание наблюдаемой последовательности для ожидания обновления GroupMembers
+            var membersUpdated = this.WhenAnyValue(x => x.GroupMembers.Count)
+                                    .Skip(1)
+                                    .FirstAsync()
+                                    .Timeout(TimeSpan.FromSeconds(5))
+                                    .Catch(Observable.Return(0));
+
+            // Запрос участников группы у сервера
+            GetGroupMembers();
+
+            try
+            {
+                // Ожидание обновления GroupMembers
+                await membersUpdated;
+
+                var dialog = new ShowMembersDialog()
+                {
+                    DataContext = new ShowMembersViewModel(GroupMembers.ToList())
+                };
+                await dialog.ShowDialog(_mainWindow);
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Error: {ex.Message}";
             }
         }
 

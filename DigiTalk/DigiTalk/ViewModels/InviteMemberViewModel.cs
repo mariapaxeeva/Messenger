@@ -1,4 +1,5 @@
-﻿using ReactiveUI;
+﻿// Логика окна добавления участника в групповой чат
+using ReactiveUI;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reactive.Linq;
