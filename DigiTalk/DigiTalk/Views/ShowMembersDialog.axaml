@@ -1,3 +1,4 @@
+<!--Диалоговое окно для просмотра участников группового чата-->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -8,7 +9,8 @@
         x:DataType="vm:ShowMembersViewModel"
         Title="Group Members"
         Icon="/Assets/icons/group-logo.ico"
-        Width="400" Height="500"
+        Width="300" Height="400"
+		Background="#ffe3fe"
         WindowStartupLocation="CenterOwner">
 	<Window.Styles>
 		<Style Selector="TextBlock">
@@ -16,24 +18,24 @@
 		</Style>
 	</Window.Styles>
 
-	<Grid RowDefinitions="Auto,Auto,*,Auto" Margin="10">
-		<!-- Заголовок -->
-		<TextBlock Text="Group Members" FontSize="18" FontWeight="Bold"
-                   Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+	<Grid RowDefinitions="Auto,*,Auto" Margin="10">
 
 		<!-- Поиск -->
 		<TextBox Watermark="Search member..." Text="{Binding SearchText}"
-                 Grid.Row="1" Margin="0,0,0,10"/>
+                 Grid.Row="0" Margin="0,0,0,10"/>
 
 		<!-- Список участников -->
-		<ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+		<ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Background="#fdf0ff">
 			<ItemsControl ItemsSource="{Binding FilteredMembers}">
 				<ItemsControl.ItemTemplate>
 					<DataTemplate>
 						<Border Margin="5" CornerRadius="5"
-                                Background="#f5f5f5"
+                                Background="#e5ccff"
                                 Padding="10">
-							<TextBlock Text="{Binding}"/>
+							<StackPanel Orientation="Horizontal" Spacing="10">
+								<Image Source="/Assets/icons/user-avatar.png" Width="20" Height="20"/>
+								<TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+							</StackPanel>
 						</Border>
 					</DataTemplate>
 				</ItemsControl.ItemTemplate>
@@ -41,8 +43,8 @@
 		</ScrollViewer>
 
 		<!-- Кнопки -->
-		<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Grid.Row="3" Spacing="10">
-			<Button Content="OK" Click="OkButton_Click" Width="80"/>
+		<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Grid.Row="2" Margin="0,10,0,0">
+			<Button Content="OK" Click="OkButton_Click" Background="#e5ccff" Width="80"/>
 		</StackPanel>
 	</Grid>
 </Window>
