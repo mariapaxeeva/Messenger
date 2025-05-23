@@ -31,8 +31,8 @@
 		<CheckBox x:Name="RegisterCheckBox" Content="Register new account" IsChecked="{Binding IsRegister}"/>
 
 		<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="5">
-			<Button Content="Cancel" Click="CancelButton_Click" Width="80"/>
-			<Button Content="OK" Click="OkButton_Click" Width="80"/>
+			<Button Content="Cancel" Click="CancelButton_Click" Background="#e5ccff" Width="80"/>
+			<Button Content="OK" Click="OkButton_Click" Background="#e5ccff" Width="80"/>
 		</StackPanel>
 	</StackPanel>
 </Window>
