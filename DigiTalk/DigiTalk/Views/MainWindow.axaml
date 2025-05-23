@@ -15,8 +15,14 @@
 		<conv:MessageBackgroundConverter x:Key="MessageBackgroundConverter"/>
 		<conv:MessageAlignmentConverter x:Key="MessageAlignmentConverter"/>
 		<conv:SenderColorConverter x:Key="SenderColorConverter"/>
+		<conv:ContactTypeToImageConverter x:Key="ContactTypeToImageConverter"/>
+
+		<Bitmap x:Key="GroupAvatar">/Assets/icons/group-avatar.png</Bitmap>
+		<Bitmap x:Key="UserAvatar">/Assets/icons/user-avatar.png</Bitmap>
+		
 	</Window.Resources>
-	<Grid RowDefinitions="Auto,*,Auto">
+	
+	<Grid RowDefinitions="Auto,*,Auto" Background="#f5f5f5">
 		<!-- Заголовок -->
 		<Border Grid.Row="0" Background="#a37ddb" Padding="10">
 			<TextBlock Text="DigiTalk" FontSize="20" Foreground="White"
@@ -30,16 +36,41 @@
 				<ColumnDefinition Width="*"/>
 			</Grid.ColumnDefinitions>
 
-			<!-- Список контактов -->
-			<StackPanel Grid.Column="0" Background="#f5f5f5">
-				<StackPanel Orientation="Horizontal">
-					<Button Content="Log In" Margin="5" Command="{Binding LoginCommand}"
-						    CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}"
-							IsEnabled="{Binding !IsAuthenticated}"/>
-					<Button Content="Log Out" Command="{Binding Disconnect}" IsEnabled="{Binding IsAuthenticated}"/>
-					<Button Content="Group" Command="{Binding CreateGroupCommand}" IsEnabled="{Binding IsAuthenticated}"/>
+			<!-- Панель управления -->
+			<StackPanel Grid.Column="0">
+				
+				<StackPanel Orientation="Horizontal" Background="#e0e0e0">
+					<!-- Кнопка Log In -->
+					<Button Classes="iconButton" Margin="5" Padding="2"
+							Command="{Binding LoginCommand}"
+							CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}"
+							IsEnabled="{Binding !IsAuthenticated}">
+						<StackPanel Orientation="Horizontal">
+							<Image Source="/Assets/icons/login-icon.png" Width="20" Height="20" Margin="0,0,0,0"/>
+						</StackPanel>
+					</Button>
+
+					<!-- Кнопка Log Out -->
+					<Button Classes="iconButton" Margin="5" Padding="2"
+							Command="{Binding Disconnect}"
+							IsEnabled="{Binding IsAuthenticated}">
+						<StackPanel Orientation="Horizontal">
+							<Image Source="/Assets/icons/logout-icon.png" Width="20" Height="20" Margin="0,0,0,0"/>
+						</StackPanel>
+					</Button>
+
+					<!-- Кнопка Create Group -->
+					<Button Classes="iconButton" Margin="5" Padding="2"
+							Command="{Binding CreateGroupCommand}"
+							IsEnabled="{Binding IsAuthenticated}">
+						<StackPanel Orientation="Horizontal">
+							<Image Source="/Assets/icons/create-group-icon.png" Width="20" Height="20" Margin="0,0,0,0"/>
+						</StackPanel>
+					</Button>
 				</StackPanel>
-				<ScrollViewer VerticalScrollBarVisibility="Visible" Height="350">
+
+				<!-- Список контактов -->
+				<ScrollViewer VerticalScrollBarVisibility="Visible" Height="400">
 					<ListBox ItemsSource="{Binding Contacts}" SelectedItem="{Binding SelectedContact}">
 						<ListBox.ItemTemplate>
 							<DataTemplate>
@@ -48,18 +79,31 @@
 										<ContextMenu>
 											<MenuItem Header="Show members"
 													  Command="{Binding #_MainWindow.DataContext.ShowMembersCommand}"
-													  IsVisible="{Binding IsGroup}"/>
+													  IsVisible="{Binding IsGroup}">
+												<MenuItem.Icon>
+													<Image Source="/Assets/icons/show-members-icon.png" Width="16" Height="16" HorizontalAlignment="Right"/>
+												</MenuItem.Icon>
+											</MenuItem>
 											<MenuItem Header="Invite member"
 													  Command="{Binding #_MainWindow.DataContext.InviteToGroupCommand}"
-													  IsVisible="{Binding IsGroup}"/>
+													  IsVisible="{Binding IsGroup}">
+												<MenuItem.Icon>
+													<Image Source="/Assets/icons/invite-icon.png" Width="16" Height="16" HorizontalAlignment="Right"/>
+												</MenuItem.Icon>
+											</MenuItem>
 											<MenuItem Header="Leave group"
 													  Command="{Binding #_MainWindow.DataContext.LeaveGroupCommand}"
-													  IsVisible="{Binding IsGroup}"/>
+													  IsVisible="{Binding IsGroup}">
+												<MenuItem.Icon>
+													<Image Source="/Assets/icons/leave-group-icon.png" Width="16" Height="16" HorizontalAlignment="Right"/>
+												</MenuItem.Icon>
+											</MenuItem>
 										</ContextMenu>
 									</StackPanel.ContextMenu>
-									<Ellipse Width="10" Height="10" Fill="#a37ddb"
-											 VerticalAlignment="Center" Margin="0,0,5,0"/>
-									<TextBlock Text="{Binding Name}" />
+									<Image Source="{Binding IsGroup, Converter={StaticResource ContactTypeToImageConverter}}"
+													Width="32" Height="32"
+													VerticalAlignment="Center" Margin="5,0,5,0"/>
+									<TextBlock Text="{Binding Name}" VerticalAlignment="Center" Margin="5,0,0,0"/>
 								</StackPanel>
 							</DataTemplate>
 						</ListBox.ItemTemplate>
@@ -91,11 +135,19 @@
 										<ContextMenu>
 											<MenuItem Header="Delete for me"
 													  Command="{Binding #_MainWindow.DataContext.DeleteForMeCommand}"
-													  CommandParameter="{Binding}"/>
+													  CommandParameter="{Binding}">
+												<MenuItem.Icon>
+													<Image Source="/Assets/icons/delete-for-me-icon.png" Width="16" Height="16" HorizontalAlignment="Right"/>
+												</MenuItem.Icon>
+											</MenuItem>
 											<MenuItem Header="Delete for everyone"
 													  Command="{Binding #_MainWindow.DataContext.DeleteForEveryoneCommand}"
 													  CommandParameter="{Binding}"
-													  IsVisible="{Binding IsOwnMessage}"/>
+													  IsVisible="{Binding IsOwnMessage}">
+												<MenuItem.Icon>
+													<Image Source="/Assets/icons/delete-for-everyone-icon.png" Width="16" Height="16" HorizontalAlignment="Right"/>
+												</MenuItem.Icon>
+											</MenuItem>
 										</ContextMenu>
 									</Border.ContextMenu>
 									<StackPanel>
@@ -119,8 +171,17 @@
 					</Grid.ColumnDefinitions>
 					<TextBox Text="{Binding MessageText}" Watermark="Type your message here..."
                              AcceptsReturn="True" VerticalAlignment="Center"/>
-					<Button Grid.Column="1" Content="Send" Margin="5,0,0,0"
-                            Command="{Binding SendMessageCommand}" Width="80"/>
+					<Button Classes="iconButton" 
+							Grid.Column="1"
+							Margin="5,0,0,0"
+							Padding="0"
+							Command="{Binding SendMessageCommand}"
+							Width="35" Height="35"
+							IsEnabled="{Binding IsAuthenticated}">
+						<Image Source="/Assets/icons/send-icon.png"
+							   Stretch="UniformToFill"
+							   Width="24" Height="24"/>
+					</Button>
 				</Grid>
 			</Grid>
 		</Grid>
