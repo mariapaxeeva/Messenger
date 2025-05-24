@@ -14,6 +14,8 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Reactive.Linq;
 using System.IO;
+using System.Collections.Generic;
+using DynamicData.Aggregation;
 
 namespace DigiTalk.ViewModels
 {
@@ -53,11 +55,21 @@ namespace DigiTalk.ViewModels
             get => _selectedContact;
             set
             {
+                if (_selectedContact == value) return;
+
+                // Сохранение текущих сообщений в кэш перед сменой контакта
+                if (_selectedContact != null && Messages.Count > 0)
+                {
+                    _messageCache[_selectedContact.Name] = new ObservableCollection<Message>(Messages.ToList());
+                    _lastUpdateTimes[_selectedContact.Name] = DateTime.Now;
+                }
+
                 this.RaiseAndSetIfChanged(ref _selectedContact, value);
                 Messages.Clear();
+
                 if (value != null)
                 {
-                    LoadMessageHistory();
+                    LoadMessageHistory().ConfigureAwait(false);
                 }
             }
         }
@@ -69,6 +81,10 @@ namespace DigiTalk.ViewModels
             set => this.RaiseAndSetIfChanged(ref _isAuthenticated, value);
         }
         private TaskCompletionSource<bool> _messageIdUpdatedTask = new TaskCompletionSource<bool>();
+
+        private Dictionary<string, ObservableCollection<Message>> _messageCache = new();
+
+        private Dictionary<string, DateTime> _lastUpdateTimes = new();
         public ObservableCollection<Contact> Contacts { get; } = new();
         public ObservableCollection<Message> Messages { get; } = new();
         public ObservableCollection<Contact> GroupMembers { get; } = new();
@@ -115,7 +131,7 @@ namespace DigiTalk.ViewModels
             {
                 _username = username;
                 _client = new TcpClient();
-                _client.Connect("localhost", 8080);
+                _client.Connect("192.168.0.248", 8080);
                 _stream = _client.GetStream();
 
                 var authData = isRegister
@@ -139,12 +155,17 @@ namespace DigiTalk.ViewModels
                     return;
                 }
 
+                // Инициализация кэша при успешном подключении
+                _messageCache = new Dictionary<string, ObservableCollection<Message>>();
+                _lastUpdateTimes = new Dictionary<string, DateTime>();
+
                 StatusMessage = $"Connected as {username}";
                 IsAuthenticated = true;
                 _isRunning = true;
 
                 _receiveThread = new Thread(ReceiveMessages);
                 _receiveThread.Start();
+
             }
             catch (Exception ex)
             {
@@ -177,11 +198,6 @@ namespace DigiTalk.ViewModels
             {
                 StatusMessage = $"Send error: {ex.Message}";
             }
-        }
-
-        private void RefreshContacts()
-        {
-            SendMessageToStream($"GET_CONTACTS");
         }
 
         private void GetGroupMembers()
@@ -258,6 +274,12 @@ namespace DigiTalk.ViewModels
                             {
                                 ProcessMembersList(message);
                             }
+                            else if (message.StartsWith("MSG_DELETED:"))
+                            {
+                                // Формат: MSG_DELETED:Id
+                                var messageId = int.Parse(message.Substring(12));
+                                ProcessMessageDeleted(messageId);
+                            }
                         });
                     }
                     catch (IOException) when (!_isRunning)
@@ -308,14 +330,71 @@ namespace DigiTalk.ViewModels
                 GroupMembers.Add(new Contact { Name = member, IsGroup = false });
         }
 
-        private void LoadMessageHistory()
+        private void ProcessMessageDeleted(int messageId)
+        {
+            // Поиск сообщения в текущем чате
+            var messageToDelete = Messages.FirstOrDefault(m => m.Id == messageId);
+            if (messageToDelete != null)
+            {
+                Messages.Remove(messageToDelete);
+
+                // Обновление UI
+                this.RaisePropertyChanged(nameof(Messages));
+            }
+
+            // Обновление кэша для всех контактов
+            foreach (var cacheEntry in _messageCache)
+            {
+                var deletedMessage = cacheEntry.Value.FirstOrDefault(m => m.Id == messageId);
+                if (deletedMessage != null)
+                {
+                    cacheEntry.Value.Remove(deletedMessage);
+                }
+            }
+        }
+
+        private async Task LoadMessageHistory()
         {
             if (SelectedContact == null) return;
 
+            var contactName = SelectedContact.Name;
+
+            // Проверка, есть ли сообщения в кэше и не устарели ли они (60 минут)
+            if (_messageCache.TryGetValue(contactName, out var cachedMessages) &&
+                cachedMessages.Count > 0 &&
+                _lastUpdateTimes.TryGetValue(contactName, out var lastUpdate) &&
+                DateTime.Now - lastUpdate < TimeSpan.FromMinutes(60))
+            {
+                // Использование кэшированных сообщений
+                Messages.Clear();
+                foreach (var msg in cachedMessages)
+                {
+                    Messages.Add(msg);
+                }
+                return;
+            }
+
+            // Если кэш пустой или устарел, загрузка с сервера
+            await LoadMessagesFromServer();
+        }
+
+        private async Task LoadMessagesFromServer()
+        {
             try
             {
+                _messageIdUpdatedTask = new TaskCompletionSource<bool>();
                 var request = $"GET_HISTORY:{SelectedContact.Name}";
                 SendMessageToStream(request);
+
+                // Ожидание завершения загрузки
+                await _messageIdUpdatedTask.Task;
+
+                // Обновление кэша
+                if (SelectedContact != null) // Проверка, что контакт выбран
+                {
+                    _messageCache[SelectedContact.Name] = new ObservableCollection<Message>(Messages.ToList());
+                    _lastUpdateTimes[SelectedContact.Name] = DateTime.Now;
+                }
             }
             catch (Exception ex)
             {
@@ -327,28 +406,30 @@ namespace DigiTalk.ViewModels
         {
             Messages.Clear();
 
-            // Формат: HISTORY:id0:sender0,timestamp0,is_group0,content0|id1,sender1...
+            // Формат: HISTORY:id0:sender0,recipient0,timestamp0,is_group0,content0|id1,sender1...
             var historyItems = message.Substring(8).Split('|');
             foreach (var item in historyItems)
             {
                 var parts = item.Split(':');
-                if (parts.Length >= 5)
+                if (parts.Length >= 6)
                 {
-                    var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(parts[2])).DateTime;
+                    var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(parts[3])).DateTime;
 
                     Messages.Add(new Message
                     {
                         Id = int.Parse(parts[0]),
                         Sender = parts[1],
-                        Content = string.Join(":", parts.Skip(4)), // На случай, если в сообщении есть ':'
+                        Recipient = parts[2],
                         Timestamp = timestamp,
-                        IsGroupMessage = parts[3] == "1",
+                        IsGroupMessage = parts[4] == "1",
+                        Content = string.Join(":", parts.Skip(5)), // На случай, если в сообщении есть ':'
                         IsOwnMessage = parts[1] == _username
                     });
                 }
             }
+
             // История загружена
-            _messageIdUpdatedTask.TrySetResult(true);
+            _messageIdUpdatedTask?.TrySetResult(true);
         }
 
         private async Task CreateGroupAsync()
@@ -379,30 +460,49 @@ namespace DigiTalk.ViewModels
             }
             else
             {
-                StatusMessage = $"Failed to create a group: make sure that the group name is not empty";
+                StatusMessage = "Failed to create a group: make sure that the group name is not empty";
             }
         }
+
         private void ProcessIncomingMessage(string message)
         {
+            // Формат: MSG:id:sender:recipient:timestamp:content
             var parts = message.Substring(4).Split(':');
-            if (parts.Length >= 3)
+            if (parts.Length >= 5)
             {
-                var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(parts[1])).DateTime;
-                var sender = parts[0];
-                var content = string.Join(":", parts.Skip(2));
-                var isGroup = sender.StartsWith("#"); // Групповые сообщения имеют префикс #
+                var id = int.Parse(parts[0]);
+                var sender = parts[1];
+                var recipient = parts[2];
+                var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(parts[3])).DateTime;
+                var content = string.Join(":", parts.Skip(4));
+                var isGroup = recipient.StartsWith("#"); // Групповые сообщения имеют префикс #
 
-                Messages.Add(new Message
+                Message newMessage = new Message
                 {
+                    Id = id,
                     Sender = sender,
+                    Recipient = recipient,
                     Content = content,
                     Timestamp = timestamp,
                     IsOwnMessage = false,
                     IsGroupMessage = isGroup
-                });
+                };
+
+                // Имя собеседника/группы для кэширования
+                string cacheKey = isGroup ? recipient.TrimStart('#') : sender;
+
+                // Добавление в текущий чат, если это активный диалог
+                if (SelectedContact != null &&
+                    ((!isGroup && SelectedContact.Name == sender) ||
+                     (isGroup && SelectedContact.Name == recipient.TrimStart('#'))))
+                {
+                    Messages.Add(newMessage);
+                }
+
+                // Добавление сообщения в кэш
+                AddToCache(cacheKey, newMessage);
             }
         }
-
         private async Task ShowMembersAsync()
         {
             if (SelectedContact?.IsGroup != true) return;
@@ -485,11 +585,13 @@ namespace DigiTalk.ViewModels
 
             try
             {
+                var isDeletedForEveryone = message.IsDeletedForEveryone ? "1" : "0";
+
                 // Если message.Id == 0, загрузка истории сообщений
                 if (message.Id == 0)
                 {
                     _messageIdUpdatedTask = new TaskCompletionSource<bool>();
-                    LoadMessageHistory();
+                    await LoadMessagesFromServer();
                     await _messageIdUpdatedTask.Task;
 
                     // Поиск сообщения в обновленной коллекции
@@ -503,7 +605,7 @@ namespace DigiTalk.ViewModels
                 }
 
                 // Формирование команды для сервера
-                var command = message.IsDeletedForEveryone ? $"DEL:{message.Id}:1" : $"DEL:{message.Id}:0";
+                var command = $"DEL:{message.Id}:{isDeletedForEveryone}";
                 SendMessageToStream(command);
 
                 // Локальное удаление
@@ -511,6 +613,17 @@ namespace DigiTalk.ViewModels
 
                 // Уведомление UI об изменении
                 this.RaisePropertyChanged(nameof(Messages));
+
+                // Обновление кэша
+                var recipient = SelectedContact.Name;
+                if (_messageCache.TryGetValue(recipient, out var cachedMessages))
+                {
+                    var msgToRemove = cachedMessages.FirstOrDefault(m => m.Id == message.Id);
+                    if (msgToRemove != null)
+                    {
+                        cachedMessages.Remove(msgToRemove);
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -527,6 +640,44 @@ namespace DigiTalk.ViewModels
         {
             message.IsDeletedForEveryone = true;
             await DeleteMessage(message);
+        }
+
+        //----УПРАВЛЕНИЕ КЭШЕМ------------------
+
+        private const int MaxCachedMessagesPerContact = 100;
+
+        // Очистка всего кэша
+        public void ClearMessageCache()
+        {
+            _messageCache.Clear();
+            _lastUpdateTimes.Clear();
+        }
+
+        // Очистка кэша для конкретного контакта
+        public void ClearContactCache(string contactName)
+        {
+            _messageCache.Remove(contactName);
+            _lastUpdateTimes.Remove(contactName);
+        }
+
+        // Добавление сообщений в кэш
+        private void AddToCache(string contactName, Message message)
+        {
+            if (!_messageCache.TryGetValue(contactName, out var messages))
+            {
+                messages = new ObservableCollection<Message>();
+                _messageCache[contactName] = messages;
+            }
+
+            messages.Add(message);
+
+            // Ограничение размера кэша
+            while (messages.Count > MaxCachedMessagesPerContact)
+            {
+                messages.RemoveAt(0);
+            }
+
+            _lastUpdateTimes[contactName] = DateTime.Now;
         }
 
         public void Disconnect()

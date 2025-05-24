@@ -26,7 +26,7 @@
 		<!-- Список контактов -->
 		<ListBox ItemsSource="{Binding FilteredContacts}" SelectedItem="{Binding SelectedContact}"
 				 ScrollViewer.VerticalScrollBarVisibility="Auto" Height="240"
-			 Background="#fdf0ff" Grid.Row="1" Margin="0,0,0,10">
+				 Background="#fdf0ff" Grid.Row="1" Margin="0,0,0,10">
 			<ListBox.ItemTemplate>
 				<DataTemplate>
 					<StackPanel Orientation="Horizontal" HorizontalAlignment="Stretch">

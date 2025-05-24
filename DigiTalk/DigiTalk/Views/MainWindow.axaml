@@ -55,21 +55,21 @@
 						</StackPanel>
 					</Button>
 
-					<!-- Кнопка Log Out -->
-					<Button Classes="iconButton" Margin="5" Padding="2"
-							Command="{Binding Disconnect}"
-							IsEnabled="{Binding IsAuthenticated}">
-						<StackPanel Orientation="Horizontal">
-							<Image Source="/Assets/icons/logout-icon.png" Width="20" Height="20" Margin="0,0,0,0"/>
-						</StackPanel>
-					</Button>
-
 					<!-- Кнопка Create Group -->
 					<Button Classes="iconButton" Margin="5" Padding="2"
 							Command="{Binding CreateGroupCommand}"
 							IsEnabled="{Binding IsAuthenticated}">
 						<StackPanel Orientation="Horizontal">
 							<Image Source="/Assets/icons/create-group-icon.png" Width="20" Height="20" Margin="0,0,0,0"/>
+						</StackPanel>
+					</Button>
+					
+					<!-- Кнопка Log Out -->
+					<Button Classes="iconButton" Margin="5" Padding="2"
+							Command="{Binding Disconnect}"
+							IsEnabled="{Binding IsAuthenticated}">
+						<StackPanel Orientation="Horizontal">
+							<Image Source="/Assets/icons/logout-icon.png" Width="20" Height="20" Margin="0,0,0,0"/>
 						</StackPanel>
 					</Button>
 				</StackPanel>
@@ -175,7 +175,8 @@
 						<ColumnDefinition Width="Auto"/>
 					</Grid.ColumnDefinitions>
 					<TextBox Text="{Binding MessageText}" Watermark="Type your message here..."
-                             AcceptsReturn="True" VerticalAlignment="Center"/>
+                             AcceptsReturn="True" VerticalAlignment="Center"
+							 KeyDown="OnMessageKeyDown"/>
 					<Button Classes="iconButton" 
 							Grid.Column="1"
 							Margin="5,0,0,0"

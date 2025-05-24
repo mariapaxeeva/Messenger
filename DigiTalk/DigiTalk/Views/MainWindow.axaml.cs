@@ -1,6 +1,9 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using DigiTalk.ViewModels;
+using System;
 
 namespace DigiTalk.Views
 {
@@ -18,6 +21,15 @@ namespace DigiTalk.Views
         private void InitializeComponent()
         {
             AvaloniaXamlLoader.Load(this);
+        }
+
+        private void OnMessageKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Tab && DataContext is MainViewModel vm)
+            {
+                vm.SendMessageCommand.Execute().Subscribe();
+                e.Handled = true;
+            }
         }
     }
 }
