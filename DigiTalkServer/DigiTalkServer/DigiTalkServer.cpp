@@ -195,7 +195,7 @@ std::string history_messages(const std::string& username, const std::string& rec
     // Для групп: извлечение из БД всех сообщений, адресованных этой группе
     // Для личных сообщений: получение из БД переписки между двумя пользователями
     query =
-        "SELECT m.id, m.sender, "
+        "SELECT m.id, m.sender, m.recipient, "
         "CASE WHEN m.deleted = 1 THEN '[Сообщение удалено]' ELSE m.content END as content, "
         "strftime('%s', m.timestamp), m.is_group "
         "FROM messages m "
@@ -218,11 +218,13 @@ std::string history_messages(const std::string& username, const std::string& rec
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         int id = sqlite3_column_int(stmt, 0);
         const char* sender = (const char*)sqlite3_column_text(stmt, 1);
-        const char* content = (const char*)sqlite3_column_text(stmt, 2);
-        time_t timestamp = sqlite3_column_int64(stmt, 3);
-        int is_group = sqlite3_column_int(stmt, 4);
+        const char* recipient = (const char*)sqlite3_column_text(stmt, 2);
+        const char* content = (const char*)sqlite3_column_text(stmt, 3);
+        time_t timestamp = sqlite3_column_int64(stmt, 4);
+        int is_group = sqlite3_column_int(stmt, 5);
 
-        history += std::to_string(id) + ":" + sender + ":" + std::to_string(timestamp) + ":" + std::to_string(is_group) + ":" + content + "|";
+        history += std::to_string(id) + ":" + sender + ":" + recipient + ":" +\
+                   std::to_string(timestamp) + ":" + std::to_string(is_group) + ":" + content + "|";
     }
     sqlite3_finalize(stmt);
 
@@ -453,8 +455,6 @@ void handle_client(SOCKET client_socket) {
             time_t timestamp = std::stol(msg.substr(sep1 + 1, sep2 - sep1 - 1));
             std::string content = msg.substr(sep2 + 1);
 
-            command = "MSG:" + username + msg.substr(sep1);
-
             // Удаление решетки у recipient, если она есть, для записи в БД
             bool is_group = (recipient[0] == '#');
             if (is_group) {
@@ -470,9 +470,12 @@ void handle_client(SOCKET client_socket) {
             sqlite3_bind_int(stmt, 4, is_group ? 1 : 0); // Проверка на групповой чат
             sqlite3_bind_int64(stmt, 5, timestamp);
             sqlite3_step(stmt);
+            int message_id = sqlite3_last_insert_rowid(db); // Получение ID вставленного сообщения
             sqlite3_finalize(stmt);
 
             // Пересылка сообщения получателю(ям)
+            msg = "MSG:" + std::to_string(message_id) + ":" + username + ":" + msg;
+
             std::lock_guard<std::mutex> lock(clients_mutex);
             if (is_group) {
                 //// Групповое сообщение
@@ -490,7 +493,7 @@ void handle_client(SOCKET client_socket) {
                     if (member != username) {
                         for (const auto& client : clients) {
                             if (client.username == member) {
-                                send(client.socket, command.c_str(), command.size(), 0);
+                                send(client.socket, msg.c_str(), msg.size(), 0);
                                 break;
                             }
                         }
@@ -502,26 +505,78 @@ void handle_client(SOCKET client_socket) {
                 // Личное сообщение
                 for (const auto& client : clients) {
                     if (client.username == recipient && client.username != username) {
-                        send(client.socket, command.c_str(), command.size(), 0);
+                        send(client.socket, msg.c_str(), msg.size(), 0);
                         break;
                     }
                 }
             }
         }
         else if (command.starts_with("DEL:")) {
-            // Формат: DEL:message_id:for_everyone (for_everyone == 1 - для всех, 0 - только для себя)
+                // Формат: DEL:message_id:for_everyone (for_everyone == 1 - для всех, 0 - только для себя)
             size_t sep = command.find(':', 4);
             int msg_id = std::stoi(command.substr(4, sep - 4));
             bool for_everyone = (command.substr(sep + 1) == "1");
 
-            // Обновление сообщения в БД
+            // Получение информации о сообщении перед удалением
             sqlite3_stmt* stmt;
+            sqlite3_prepare_v2(db,
+                "SELECT sender, recipient, is_group FROM messages WHERE id = ?",
+                -1, &stmt, 0);
+            sqlite3_bind_int(stmt, 1, msg_id);
+
+            std::string sender, recipient;
+            bool is_group = false;
+
+            if (sqlite3_step(stmt) == SQLITE_ROW) {
+                sender = (const char*)sqlite3_column_text(stmt, 0);
+                recipient = (const char*)sqlite3_column_text(stmt, 1);
+                is_group = sqlite3_column_int(stmt, 2) == 1;
+            }
+            sqlite3_finalize(stmt);
+
+            // Обновление сообщения в БД
             if (for_everyone) {
                 // Удаление для всех
                 sqlite3_prepare_v2(db,
                     "UPDATE messages SET deleted = 1, content = '[Сообщение удалено]' WHERE id = ?",
                     -1, &stmt, 0);
                 sqlite3_bind_int(stmt, 1, msg_id);
+                sqlite3_step(stmt);
+                sqlite3_finalize(stmt);
+
+                // Рассылка уведомлений об удалении
+                std::string notify_msg = "MSG_DELETED:" + std::to_string(msg_id);
+
+                if (is_group) {
+                    // Для группового чата - получение всех участников группы
+                    sqlite3_prepare_v2(db,
+                        "SELECT username FROM group_members gm "
+                        "JOIN groups g ON gm.group_id = g.id "
+                        "WHERE g.name = ?", -1, &stmt, 0);
+                    sqlite3_bind_text(stmt, 1, recipient.c_str(), -1, SQLITE_STATIC);
+
+                    while (sqlite3_step(stmt) == SQLITE_ROW) {
+                        std::string member = (const char*)sqlite3_column_text(stmt, 0);
+                        if (member != username) { // Не отправляю себе
+                            for (const auto& client : clients) {
+                                if (client.username == member) {
+                                    send(client.socket, notify_msg.c_str(), notify_msg.size(), 0);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    sqlite3_finalize(stmt);
+                }
+                else {
+                    // Для личного чата - отправление собеседнику
+                    for (const auto& client : clients) {
+                        if (client.username == recipient) {
+                            send(client.socket, notify_msg.c_str(), notify_msg.size(), 0);
+                            break;
+                        }
+                    }
+                }
             }
             else {
                 // Удаление только для отправителя
@@ -531,9 +586,9 @@ void handle_client(SOCKET client_socket) {
                     -1, &stmt, 0);
                 sqlite3_bind_int(stmt, 1, msg_id);
                 sqlite3_bind_text(stmt, 2, username.c_str(), -1, SQLITE_STATIC);
+                sqlite3_step(stmt);
+                sqlite3_finalize(stmt);
             }
-            sqlite3_step(stmt);
-            sqlite3_finalize(stmt);
         }
         else if (command.starts_with("GET_CONTACTS")) {
             // Формирование списка контактов и его отправка клиенту
