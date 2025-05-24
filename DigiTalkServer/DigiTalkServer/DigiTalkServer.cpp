@@ -332,6 +332,15 @@ void create_group(SOCKET client_socket, const std::string& username, const std::
             // Уведомление создателя
             std::string responce = "GROUP_CREATED:" + group_name;
             send(client_socket, responce.c_str(), responce.size(), 0);
+
+            // Обновление списка контактов у подключенных участников группы
+            for (const auto& client : clients) {
+                // Проверяем, содержится ли имя пользователя в векторе members
+                if (std::find(members.begin(), members.end(), client.username) != members.end()) {
+                    std::string contacts_list = list_contacts(client.username);
+                    send(client.socket, contacts_list.c_str(), contacts_list.size(), 0);
+                }
+            }
         }
     }
 }
@@ -416,14 +425,6 @@ void handle_client(SOCKET client_socket) {
         }
     }
     sqlite3_finalize(stmt);
-
-    //// Получение публичного ключа от клиента
-    //len = recv(client_socket, buffer, BUFFER_SIZE, 0);
-    //if (len <= 0) {
-    //    closesocket(client_socket);
-    //    return;
-    //}
-    //public_key = load_public_key(std::string(buffer, len));
 
     // Добавление клиента в список подключенных
     {
@@ -524,7 +525,7 @@ void handle_client(SOCKET client_socket) {
             }
             else {
                 // Удаление только для отправителя
-                // Сохранение в отдельной таблице БД идентификатора удаленного сообщения и его отправителя
+                // Сохранение в отдельной таблице БД идентификатора удаленного сообщения и того, кто удалил у себя
                 sqlite3_prepare_v2(db,
                     "INSERT INTO deleted_messages (message_id, username) VALUES (?, ?)",
                     -1, &stmt, 0);
@@ -592,6 +593,14 @@ void handle_client(SOCKET client_socket) {
                     if (sqlite3_step(stmt) == SQLITE_DONE) {
                         std::string notify_msg = "GROUP_MEMBER_ADDED:" + group_name + ":" + invite_username;
                         send(client_socket, notify_msg.c_str(), notify_msg.size(), 0);
+
+                        // Обновление списка контактов у приглашенного пользователя
+                        for (const auto& client : clients) {
+                            if (client.username == invite_username) {
+                                std::string contacts_list = list_contacts(client.username);
+                                send(client.socket, contacts_list.c_str(), contacts_list.size(), 0);
+                            }
+                        }
                     }
                     else {
                         send(client_socket, "INVITE_RESULT:FAIL:Database error", 32, 0);

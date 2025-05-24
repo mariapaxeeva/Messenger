@@ -7,15 +7,15 @@ D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkS
 D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(301,26): warning C4244: инициализация: преобразование "sqlite3_int64" в "int", возможна потеря данных
 D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(306,64): warning C4244: аргумент: преобразование "sqlite3_int64" в "int", возможна потеря данных
 D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(334,64): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(440,70): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(471,68): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(495,82): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(507,74): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(543,74): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(550,62): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(556,62): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(597,80): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
-D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(627,72): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(437,70): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(468,68): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(492,82): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(504,74): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(540,74): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(547,62): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(553,62): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(594,80): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
+D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\DigiTalkServer\DigiTalkServer.cpp(624,72): warning C4267: аргумент: преобразование из "size_t" в "int"; возможна потеря данных
   DigiTalkServer.vcxproj -> D:\maria\VC++\repos\3 курс\Messenger\DigiTalkServer\x64\Debug\DigiTalkServer.exe
   "pwsh.exe" не является внутренней или внешней
   командой, исполняемой программой или пакетным файлом.
