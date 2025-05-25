@@ -11,22 +11,20 @@ using System.Threading.Tasks;
 using DigiTalk.Models;
 using DigiTalk.Views;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Reactive.Linq;
 using System.IO;
 using System.Collections.Generic;
-using DynamicData.Aggregation;
 
 namespace DigiTalk.ViewModels
 {
     public class MainViewModel : ViewModelBase
     {
         private readonly Window _mainWindow;
-        private TcpClient _client;
-        private NetworkStream _stream;
-        private string _username;
+        private TcpClient? _client;
+        private NetworkStream? _stream;
+        private string? _username;
         private bool _isRunning;
-        private Thread _receiveThread;
+        private Thread? _receiveThread;
 
         private string _statusMessage = "Disconnected";
         public string StatusMessage
@@ -35,22 +33,22 @@ namespace DigiTalk.ViewModels
             set => this.RaiseAndSetIfChanged(ref _statusMessage, value);
         }
 
-        private string _messageText;
-        public string MessageText
+        private string? _messageText;
+        public string? MessageText
         {
             get => _messageText;
             set => this.RaiseAndSetIfChanged(ref _messageText, value);
         }
 
-        private Message _selectedMessage;
-        public Message SelectedMessage
+        private Message? _selectedMessage;
+        public Message? SelectedMessage
         {
             get => _selectedMessage;
             set => this.RaiseAndSetIfChanged(ref _selectedMessage, value);
         }
 
-        private Contact _selectedContact;
-        public Contact SelectedContact
+        private Contact? _selectedContact;
+        public Contact? SelectedContact
         {
             get => _selectedContact;
             set
@@ -104,16 +102,18 @@ namespace DigiTalk.ViewModels
 
             // Инициализация команд
             SendMessageCommand = ReactiveCommand.Create(SendMessage);
-            LoginCommand = ReactiveCommand.CreateFromTask<Window>(LoginAsync);
-            CreateGroupCommand = ReactiveCommand.CreateFromTask(CreateGroupAsync);
-            ShowMembersCommand = ReactiveCommand.CreateFromTask(ShowMembersAsync);
-            InviteToGroupCommand = ReactiveCommand.CreateFromTask(InviteToGroupAsync);
-            LeaveGroupCommand = ReactiveCommand.CreateFromTask(LeaveGroupAsync);
+            LoginCommand = ReactiveCommand.CreateFromTask<Window>(Login);
+            CreateGroupCommand = ReactiveCommand.CreateFromTask(CreateGroup);
+            ShowMembersCommand = ReactiveCommand.CreateFromTask(ShowMembers);
+            InviteToGroupCommand = ReactiveCommand.CreateFromTask(InviteToGroup);
+            LeaveGroupCommand = ReactiveCommand.Create(LeaveGroup);
             DeleteForMeCommand = ReactiveCommand.CreateFromTask<Message>(DeleteForMe);
             DeleteForEveryoneCommand = ReactiveCommand.CreateFromTask<Message>(DeleteForEveryone);
         }
 
-        private async Task LoginAsync(Window window)
+        // ------------------------------------------ СВЯЗЬ С СЕРВЕРОМ ----------------------------------------------------
+
+        private async Task Login(Window window)
         {
             var loginDialog = new LoginDialog();
             var result = await loginDialog.ShowDialog<LoginDialogResult>(window);
@@ -173,6 +173,58 @@ namespace DigiTalk.ViewModels
             }
         }
 
+        public void Disconnect()
+        {
+            try
+            {
+                _isRunning = false;
+                IsAuthenticated = false;
+                Contacts.Clear();
+
+                _client?.Client?.Close(); // Прерывание блокирующей операции чтения (принудительное закрытие сокета)
+
+                // Ожидание завершения потока (с таймаутом 2 сек)
+                if (_receiveThread != null && _receiveThread.IsAlive)
+                {
+                    if (!_receiveThread.Join(TimeSpan.FromSeconds(2)))
+                    {
+                        _receiveThread.Interrupt(); // Принудительное прерывание
+                    }
+                }
+                _stream?.Close();
+                _client?.Close();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Disconnect error: {ex.Message}");
+            }
+            finally
+            {
+                StatusMessage = "Disconnected";
+            }
+        }
+
+        // ------------------------------------- ОБМЕН СООБЩЕНИЯМИ С СЕРВЕРОМ -----------------------------------------------
+
+        private void SendMessageToStream(string message)
+        {
+            if (_stream == null) return;
+
+            var data = Encoding.UTF8.GetBytes(message);
+            _stream.Write(data, 0, data.Length);
+        }
+
+        private string ReceiveMessageFromStream()
+        {
+            if (_stream == null) return string.Empty;
+
+            var buffer = new byte[4096];
+            var bytesRead = _stream.Read(buffer, 0, buffer.Length);
+            return Encoding.UTF8.GetString(buffer, 0, bytesRead);
+        }
+
+        // -------------------------------------------- КОМАНДЫ СЕРВЕРУ -----------------------------------------------------
+
         private void SendMessage()
         {
             if (SelectedContact == null || string.IsNullOrWhiteSpace(MessageText))
@@ -186,7 +238,7 @@ namespace DigiTalk.ViewModels
 
                 Messages.Add(new Message
                 {
-                    Sender = _username,
+                    Sender = _username ?? string.Empty,
                     Content = MessageText,
                     Timestamp = DateTimeOffset.FromUnixTimeSeconds(timestamp).DateTime,
                     IsOwnMessage = true
@@ -197,159 +249,6 @@ namespace DigiTalk.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"Send error: {ex.Message}";
-            }
-        }
-
-        private void GetGroupMembers()
-        {
-            SendMessageToStream($"GET_GROUP_MEMBERS:{SelectedContact.Name}");
-        }
-
-        private void SendMessageToStream(string message)
-        {
-            var data = Encoding.UTF8.GetBytes(message);
-            _stream.Write(data, 0, data.Length);
-        }
-
-        private string ReceiveMessageFromStream()
-        {
-            var buffer = new byte[4096];
-            var bytesRead = _stream.Read(buffer, 0, buffer.Length);
-            return Encoding.UTF8.GetString(buffer, 0, bytesRead);
-        }
-
-        private void ReceiveMessages()
-        {
-            try
-            {
-                while (_isRunning)
-                {
-                    try
-                    {
-                        var message = ReceiveMessageFromStream();
-
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                        {
-                            if (message.StartsWith("CONTACTS:"))
-                            {
-                                ProcessContactsList(message);
-                            }
-                            else if (message.StartsWith("HISTORY:"))
-                            {
-                                ProcessHistoryMessages(message);
-                            }
-                            else if (message.StartsWith("MSG:"))
-                            {
-                                ProcessIncomingMessage(message);
-                            }
-                            else if (message.StartsWith("GROUP_CREATED:"))
-                            {
-                                // Формат: GROUP_CREATED:groupname
-                                var groupName = message.Substring(14);
-                                StatusMessage = $"Group successfully created: {groupName}";
-                            }
-                            else if (message.StartsWith("GROUP_MEMBER_ADDED:"))
-                            {
-                                // Формат: GROUP_MEMBER_ADDED:groupname:username
-                                var parts = message.Substring(18).Split(':');
-                                if (parts.Length == 2)
-                                {
-                                    var groupName = parts[0];
-                                    var username = parts[1];
-                                    StatusMessage = $"{username} joined group {groupName}";
-                                }
-                            }
-                            else if (message.StartsWith("GROUP_MEMBER_LEFT:"))
-                            {
-                                // Формат: GROUP_MEMBER_LEFT:groupname:username
-                                var parts = message.Substring(17).Split(':');
-                                if (parts.Length == 2)
-                                {
-                                    var groupName = parts[0];
-                                    var username = parts[1];
-                                    StatusMessage = $"{username} left group {groupName}";
-                                }
-                            }
-                            else if (message.StartsWith("GROUP_MEMBERS:"))
-                            {
-                                ProcessMembersList(message);
-                            }
-                            else if (message.StartsWith("MSG_DELETED:"))
-                            {
-                                // Формат: MSG_DELETED:Id
-                                var messageId = int.Parse(message.Substring(12));
-                                ProcessMessageDeleted(messageId);
-                            }
-                        });
-                    }
-                    catch (IOException) when (!_isRunning)
-                    {
-                        break;
-                    }
-                    catch (Exception ex)
-                    {
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                            StatusMessage = $"Receive error: {ex.Message}");
-                            _isRunning = false;
-                        break;
-                    }
-                }
-            }
-            finally
-            {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    StatusMessage = "Disconnected");
-            }
-        }
-
-        private void ProcessContactsList(string message)
-        {
-            Contacts.Clear();
-
-            // Формат: CONTACTS:username1,username2...|GROUPS:groupname1,groupname2...
-            var parts = message.Split('|');
-            var users = parts[0].Substring(9).Split(',', StringSplitOptions.RemoveEmptyEntries);
-            var groups = parts[1].Substring(7).Split(',', StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (var user in users)
-                Contacts.Add(new Contact { Name = user, IsGroup = false });
-
-            foreach (var group in groups)
-                Contacts.Add(new Contact { Name = group, IsGroup = true });
-        }
-
-        private void ProcessMembersList(string message)
-        {
-            GroupMembers.Clear();
-
-            // Формат: GROUP_MEMBERS:groupname:member1,member2,member3
-            var parts = message.Substring(14).Split(':');
-            var groupName = parts[0];
-            var members = parts[1].Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
-            foreach (var member in members)
-                GroupMembers.Add(new Contact { Name = member, IsGroup = false });
-        }
-
-        private void ProcessMessageDeleted(int messageId)
-        {
-            // Поиск сообщения в текущем чате
-            var messageToDelete = Messages.FirstOrDefault(m => m.Id == messageId);
-            if (messageToDelete != null)
-            {
-                Messages.Remove(messageToDelete);
-
-                // Обновление UI
-                this.RaisePropertyChanged(nameof(Messages));
-            }
-
-            // Обновление кэша для всех контактов
-            foreach (var cacheEntry in _messageCache)
-            {
-                var deletedMessage = cacheEntry.Value.FirstOrDefault(m => m.Id == messageId);
-                if (deletedMessage != null)
-                {
-                    cacheEntry.Value.Remove(deletedMessage);
-                }
             }
         }
 
@@ -402,37 +301,7 @@ namespace DigiTalk.ViewModels
             }
         }
 
-        private void ProcessHistoryMessages(string message)
-        {
-            Messages.Clear();
-
-            // Формат: HISTORY:id0:sender0,recipient0,timestamp0,is_group0,content0|id1,sender1...
-            var historyItems = message.Substring(8).Split('|');
-            foreach (var item in historyItems)
-            {
-                var parts = item.Split(':');
-                if (parts.Length >= 6)
-                {
-                    var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(parts[3])).DateTime;
-
-                    Messages.Add(new Message
-                    {
-                        Id = int.Parse(parts[0]),
-                        Sender = parts[1],
-                        Recipient = parts[2],
-                        Timestamp = timestamp,
-                        IsGroupMessage = parts[4] == "1",
-                        Content = string.Join(":", parts.Skip(5)), // На случай, если в сообщении есть ':'
-                        IsOwnMessage = parts[1] == _username
-                    });
-                }
-            }
-
-            // История загружена
-            _messageIdUpdatedTask?.TrySetResult(true);
-        }
-
-        private async Task CreateGroupAsync()
+        private async Task CreateGroup()
         {
             // Фильтр контактов (исключает текущего пользователя и группы)
             var filteredContacts = Contacts
@@ -443,7 +312,7 @@ namespace DigiTalk.ViewModels
             {
                 DataContext = new GroupDialogViewModel(filteredContacts)
             };
-            var result = await dialog.ShowDialog<GroupCreationResult>(_mainWindow); 
+            var result = await dialog.ShowDialog<GroupCreationResult>(_mainWindow);
             if (result?.Result == true)
             {
                 // Формирование команды для сервера: CREATE_GROUP:groupname:member1,member2,member3
@@ -464,46 +333,12 @@ namespace DigiTalk.ViewModels
             }
         }
 
-        private void ProcessIncomingMessage(string message)
+        private void GetGroupMembers()
         {
-            // Формат: MSG:id:sender:recipient:timestamp:content
-            var parts = message.Substring(4).Split(':');
-            if (parts.Length >= 5)
-            {
-                var id = int.Parse(parts[0]);
-                var sender = parts[1];
-                var recipient = parts[2];
-                var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(parts[3])).DateTime;
-                var content = string.Join(":", parts.Skip(4));
-                var isGroup = recipient.StartsWith("#"); // Групповые сообщения имеют префикс #
-
-                Message newMessage = new Message
-                {
-                    Id = id,
-                    Sender = sender,
-                    Recipient = recipient,
-                    Content = content,
-                    Timestamp = timestamp,
-                    IsOwnMessage = false,
-                    IsGroupMessage = isGroup
-                };
-
-                // Имя собеседника/группы для кэширования
-                string cacheKey = isGroup ? recipient.TrimStart('#') : sender;
-
-                // Добавление в текущий чат, если это активный диалог
-                if (SelectedContact != null &&
-                    ((!isGroup && SelectedContact.Name == sender) ||
-                     (isGroup && SelectedContact.Name == recipient.TrimStart('#'))))
-                {
-                    Messages.Add(newMessage);
-                }
-
-                // Добавление сообщения в кэш
-                AddToCache(cacheKey, newMessage);
-            }
+            SendMessageToStream($"GET_GROUP_MEMBERS:{SelectedContact.Name}");
         }
-        private async Task ShowMembersAsync()
+
+        private async Task ShowMembers()
         {
             if (SelectedContact?.IsGroup != true) return;
 
@@ -534,7 +369,7 @@ namespace DigiTalk.ViewModels
             }
         }
 
-        private async Task InviteToGroupAsync()
+        private async Task InviteToGroup()
         {
             if (SelectedContact?.IsGroup != true) return;
 
@@ -570,7 +405,7 @@ namespace DigiTalk.ViewModels
             }
         }
 
-        private async Task LeaveGroupAsync()
+        private void LeaveGroup()
         {
             if (SelectedContact?.IsGroup != true) return;
 
@@ -642,7 +477,211 @@ namespace DigiTalk.ViewModels
             await DeleteMessage(message);
         }
 
-        //----УПРАВЛЕНИЕ КЭШЕМ------------------
+        // ------------------------------------- ОБРАБОТКА ПОЛУЧЕННЫХ СООБЩЕНИЙ -------------------------------------------
+
+        private void ReceiveMessages()
+        {
+            try
+            {
+                while (_isRunning)
+                {
+                    try
+                    {
+                        var message = ReceiveMessageFromStream();
+
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            if (message.StartsWith("CONTACTS:"))
+                            {
+                                ProcessContactsList(message);
+                            }
+                            else if (message.StartsWith("HISTORY:"))
+                            {
+                                ProcessHistoryMessages(message);
+                            }
+                            else if (message.StartsWith("MSG:"))
+                            {
+                                ProcessIncomingMessage(message);
+                            }
+                            else if (message.StartsWith("GROUP_MEMBERS:"))
+                            {
+                                ProcessMembersList(message);
+                            }
+                            else if (message.StartsWith("MSG_DELETED:"))
+                            {
+                                ProcessMessageDeleted(message);
+                            }
+                            else if (message.StartsWith("GROUP_CREATED:"))
+                            {
+                                // Формат: GROUP_CREATED:groupname
+                                var groupName = message.Substring(14);
+                                StatusMessage = $"Group successfully created: {groupName}";
+                            }
+                            else if (message.StartsWith("GROUP_MEMBER_ADDED:"))
+                            {
+                                // Формат: GROUP_MEMBER_ADDED:groupname:username
+                                var parts = message.Substring(19).Split(':');
+                                if (parts.Length == 2)
+                                {
+                                    var groupName = parts[0];
+                                    var username = parts[1];
+                                    StatusMessage = $"You are joined group <{groupName}>";
+                                }
+                            }
+                            else if (message.StartsWith("GROUP_MEMBER_LEFT:"))
+                            {
+                                // Формат: GROUP_MEMBER_LEFT:groupname
+                                var groupName = message.Substring(18);
+                                StatusMessage = $"You left the group <{groupName}>";
+                            }
+                        });
+                    }
+                    catch (IOException) when (!_isRunning)
+                    {
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                            StatusMessage = $"Receive error: {ex.Message}");
+                        _isRunning = false;
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    StatusMessage = "Disconnected");
+            }
+        }
+
+        // ----------- ОБРАБОТЧИКИ ПОЛУЧЕННЫХ СООБЩЕНИЙ ----------------
+        private void ProcessContactsList(string message)
+        {
+            Contacts.Clear();
+
+            // Формат: CONTACTS:username1,username2...|GROUPS:groupname1,groupname2...
+            var parts = message.Split('|');
+            var users = parts[0].Substring(9).Split(',', StringSplitOptions.RemoveEmptyEntries);
+            var groups = parts[1].Substring(7).Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var user in users)
+                Contacts.Add(new Contact { Name = user, IsGroup = false });
+
+            foreach (var group in groups)
+                Contacts.Add(new Contact { Name = group, IsGroup = true });
+        }
+
+        private void ProcessMembersList(string message)
+        {
+            GroupMembers.Clear();
+
+            // Формат: GROUP_MEMBERS:groupname:member1,member2,member3...
+            var parts = message.Substring(14).Split(':');
+            var groupName = parts[0];
+            var members = parts[1].Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+            foreach (var member in members)
+                GroupMembers.Add(new Contact { Name = member, IsGroup = false });
+        }
+
+        private void ProcessMessageDeleted(string message)
+        {
+            // Формат: MSG_DELETED:Id
+            var messageId = int.Parse(message.Substring(12));
+
+            // Поиск сообщения в текущем чате
+            var messageToDelete = Messages.FirstOrDefault(m => m.Id == messageId);
+            if (messageToDelete != null)
+            {
+                Messages.Remove(messageToDelete);
+
+                // Обновление UI
+                this.RaisePropertyChanged(nameof(Messages));
+            }
+
+            // Обновление кэша для всех контактов
+            foreach (var cacheEntry in _messageCache)
+            {
+                var deletedMessage = cacheEntry.Value.FirstOrDefault(m => m.Id == messageId);
+                if (deletedMessage != null)
+                {
+                    cacheEntry.Value.Remove(deletedMessage);
+                }
+            }
+        }
+
+        private void ProcessHistoryMessages(string message)
+        {
+            Messages.Clear();
+
+            // Формат: HISTORY:id0:sender0,recipient0,timestamp0,is_group0,content0|id1,sender1...
+            var historyItems = message.Substring(8).Split('|');
+            foreach (var item in historyItems)
+            {
+                var parts = item.Split(':');
+                if (parts.Length >= 6)
+                {
+                    var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(parts[3])).DateTime;
+
+                    Messages.Add(new Message
+                    {
+                        Id = int.Parse(parts[0]),
+                        Sender = parts[1],
+                        Recipient = parts[2],
+                        Timestamp = timestamp,
+                        IsGroupMessage = parts[4] == "1",
+                        Content = string.Join(":", parts.Skip(5)), // На случай, если в сообщении есть ':'
+                        IsOwnMessage = parts[1] == _username
+                    });
+                }
+            }
+
+            // История загружена
+            _messageIdUpdatedTask?.TrySetResult(true);
+        }
+
+        private void ProcessIncomingMessage(string message)
+        {
+            // Формат: MSG:id:sender:recipient:timestamp:content
+            var parts = message.Substring(4).Split(':');
+            if (parts.Length >= 5)
+            {
+                var id = int.Parse(parts[0]);
+                var sender = parts[1];
+                var recipient = parts[2];
+                var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(parts[3])).DateTime;
+                var content = string.Join(":", parts.Skip(4));
+                var isGroup = recipient.StartsWith("#"); // Групповые сообщения имеют префикс #
+
+                Message newMessage = new Message
+                {
+                    Id = id,
+                    Sender = sender,
+                    Recipient = recipient,
+                    Content = content,
+                    Timestamp = timestamp,
+                    IsOwnMessage = false,
+                    IsGroupMessage = isGroup
+                };
+
+                // Имя собеседника/группы для кэширования
+                string cacheKey = isGroup ? recipient.TrimStart('#') : sender;
+
+                // Добавление в текущий чат, если это активный диалог
+                if (SelectedContact != null &&
+                    ((!isGroup && SelectedContact.Name == sender) ||
+                     (isGroup && SelectedContact.Name == recipient.TrimStart('#'))))
+                {
+                    Messages.Add(newMessage);
+                }
+
+                // Добавление сообщения в кэш
+                AddToCache(cacheKey, newMessage);
+            }
+        }
+
+        // ------------ УПРАВЛЕНИЕ КЭШЕМ ------------------
 
         private const int MaxCachedMessagesPerContact = 100;
 
@@ -678,37 +717,6 @@ namespace DigiTalk.ViewModels
             }
 
             _lastUpdateTimes[contactName] = DateTime.Now;
-        }
-
-        public void Disconnect()
-        {
-            try
-            {
-                _isRunning = false;
-                IsAuthenticated = false;
-                Contacts.Clear();
-
-                _client?.Client?.Close(); // Прерывание блокирующей операции чтения (принудительное закрытие сокета)
-
-                // Ожидание завершения потока (с таймаутом 2 сек)
-                if (_receiveThread != null && _receiveThread.IsAlive)
-                {
-                    if (!_receiveThread.Join(TimeSpan.FromSeconds(2)))
-                    {
-                        _receiveThread.Interrupt(); // Принудительное прерывание
-                    }
-                }
-                _stream?.Close();
-                _client?.Close();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Disconnect error: {ex.Message}");
-            }
-            finally
-            {
-                StatusMessage = "Disconnected";
-            }
         }
     }
 }

@@ -11,7 +11,7 @@ namespace DigiTalk.Converters
 {
     public class ContactTypeToImageConverter : IValueConverter
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
             if (value is bool isGroup)
             {
@@ -26,15 +26,15 @@ namespace DigiTalk.Converters
                     var bitmap = new Bitmap(AssetLoader.Open(new Uri(uri)));
                     return bitmap;
                 }
-                catch (Exception ex)
+                catch
                 {
-                    return null!;
+                    return null;
                 }
             }
-            return null!;
+            return null;
         }
 
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
             throw new NotImplementedException();
         }

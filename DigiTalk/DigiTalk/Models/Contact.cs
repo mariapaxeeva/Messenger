@@ -1,6 +1,10 @@
 ﻿// Модель контакта (пользователь)
-public class Contact
+
+namespace DigiTalk
 {
-    public string Name { get; set; } // Имя
-    public bool IsGroup { get; set; } // Является ли группой
+    public class Contact
+    {
+        public string Name { get; set; } // Имя
+        public bool IsGroup { get; set; } // Является ли группой
+    }
 }
